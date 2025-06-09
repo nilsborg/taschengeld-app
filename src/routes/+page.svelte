@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import type { Kid, Transaction } from '$lib/server/db/schema';
+	import type { Kid, Transaction } from '$lib/server/supabase';
 
 	let { data }: { data: { louis?: Kid; transactions?: Transaction[] } } = $props();
 
@@ -13,9 +13,9 @@
 	}
 
 	// Format date
-	function formatDate(timestamp: number | Date | null): string {
+	function formatDate(timestamp: string | Date | null): string {
 		if (!timestamp) return '';
-		const date = typeof timestamp === 'number' ? new Date(timestamp * 1000) : new Date(timestamp);
+		const date = new Date(timestamp);
 		return date.toLocaleDateString('de-DE', {
 			year: 'numeric',
 			month: 'short',
@@ -70,7 +70,7 @@
 			<h2 class="mb-4 text-xl font-semibold text-gray-800">Aktueller Kontostand</h2>
 			<div class="text-center">
 				<div class="mb-2 text-4xl font-bold text-green-600">
-					{formatCurrency(data.louis?.currentBalance ?? 0)}
+					{formatCurrency(data.louis?.current_balance ?? 0)}
 				</div>
 				<p class="text-gray-600">Verfügbares Guthaben</p>
 			</div>
@@ -94,7 +94,7 @@
 									name="amount"
 									step="0.01"
 									min="0.01"
-									max={data.louis?.currentBalance ?? 0}
+									max={data.louis?.current_balance ?? 0}
 									class="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
 									required
 								/>
@@ -160,7 +160,7 @@
 									name="weeklyAllowance"
 									step="0.01"
 									min="0"
-									value={data.louis?.weeklyAllowance ?? 10}
+									value={data.louis?.weekly_allowance ?? 10}
 									class="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
 									required
 								/>
@@ -175,7 +175,7 @@
 									name="interestRate"
 									step="0.01"
 									min="0"
-									value={((data.louis?.interestRate ?? 0.01) * 100).toFixed(2)}
+									value={((data.louis?.interest_rate ?? 0.01) * 100).toFixed(2)}
 									class="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
 									required
 								/>
@@ -209,7 +209,7 @@
 											</div>
 										{/if}
 										<div class="mt-1 text-xs text-gray-500">
-											{formatDate(transaction.createdAt)}
+											{formatDate(transaction.created_at)}
 										</div>
 									</div>
 									<div

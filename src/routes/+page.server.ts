@@ -1,7 +1,7 @@
-import { PocketMoneyService } from '$lib/server/pocketMoney';
+import { PocketMoneyService } from '$lib/server/pocketMoneySupabase';
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import type { Kid, Transaction } from '$lib/server/db/schema';
+import type { Kid, Transaction } from '$lib/server/supabase';
 
 export const load: PageServerLoad = async (): Promise<{
 	louis: Kid | undefined;
@@ -66,7 +66,7 @@ export const actions: Actions = {
 
 	addWeeklyAllowance: async () => {
 		try {
-			const newBalance = await PocketMoneyService.addWeeklyAllowance();
+			const newBalance = await PocketMoneyService.addWeeklyAllowanceManual();
 			return { success: true, newBalance, message: 'Weekly allowance added successfully' };
 		} catch (error) {
 			return fail(400, { error: (error as Error).message });

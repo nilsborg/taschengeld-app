@@ -12,9 +12,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
-		"db:push": "drizzle-kit push",
-		"db:migrate": "drizzle-kit migrate",
-		"db:studio": "drizzle-kit studio"
+		"_comment": "Run 'supabase gen types typescript --project-id YOUR_PROJECT_ID > src/lib/types/supabase.ts' to generate types after installing Supabase CLI"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -25,6 +23,7 @@
 		"@tailwindcss/forms": "^0.5.9",
 		"@tailwindcss/vite": "^4.0.0",
 		"@types/node": "^22",
+		"dotenv": "^16.5.0",
 		"drizzle-kit": "^0.30.2",
 		"eslint": "^9.18.0",
 		"eslint-config-prettier": "^10.0.1",
@@ -42,6 +41,7 @@
 	},
 	"dependencies": {
 		"@libsql/client": "^0.14.0",
+		"@supabase/supabase-js": "^2.50.0",
 		"drizzle-orm": "^0.40.0"
 	},
 	"pnpm": {

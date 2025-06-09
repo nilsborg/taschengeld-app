@@ -1,4 +1,4 @@
-import { PocketMoneyService } from '$lib/server/pocketMoney';
+import { PocketMoneyService } from '$lib/server/pocketMoneySupabase';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
@@ -42,8 +42,8 @@ export const GET: RequestHandler = async () => {
 
 		return json({
 			isDue,
-			currentBalance: louis?.currentBalance ?? 0,
-			weeklyAllowance: louis?.weeklyAllowance ?? 0
+			currentBalance: louis?.current_balance ?? 0,
+			weeklyAllowance: louis?.weekly_allowance ?? 0
 		});
 	} catch (error) {
 		console.error('Error checking weekly allowance status:', error);
