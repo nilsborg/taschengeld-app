@@ -1,28 +1,32 @@
 import { db } from './db';
-import { kids, transactions, type Kid, type NewKid, type NewTransaction } from './db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { kids, transactions, type Kid, type NewKid } from './db/schema';
+import { eq, desc, and } from 'drizzle-orm';
 
 export class PocketMoneyService {
 	// Initialize Louis if he doesn't exist
 	static async initializeLouis(weeklyAllowance: number = 10, interestRate: number = 0.01) {
-		const existingLouis = await db.select().from(kids).where(eq(kids.name, 'Louis')).get();
-		
-		if (!existingLouis) {
-			const [louis] = await db.insert(kids).values({
-				name: 'Louis',
-				weeklyAllowance,
-				interestRate,
-				currentBalance: 0
-			}).returning();
+		const existingLouis = await db.select().from(kids).where(eq(kids.name, 'Louis')).limit(1);
+
+		if (existingLouis.length === 0) {
+			const [louis] = await db
+				.insert(kids)
+				.values({
+					name: 'Louis',
+					weeklyAllowance,
+					interestRate,
+					currentBalance: 0
+				})
+				.returning();
 			return louis;
 		}
-		
-		return existingLouis;
+
+		return existingLouis[0];
 	}
 
 	// Get Louis's current information
 	static async getLouis(): Promise<Kid | undefined> {
-		return await db.select().from(kids).where(eq(kids.name, 'Louis')).get();
+		const result = await db.select().from(kids).where(eq(kids.name, 'Louis')).limit(1);
+		return result[0];
 	}
 
 	// Update Louis's settings
@@ -33,13 +37,11 @@ export class PocketMoneyService {
 		const updateData: Partial<NewKid> = {
 			updatedAt: new Date()
 		};
-		
+
 		if (weeklyAllowance !== undefined) updateData.weeklyAllowance = weeklyAllowance;
 		if (interestRate !== undefined) updateData.interestRate = interestRate;
 
-		await db.update(kids)
-			.set(updateData)
-			.where(eq(kids.id, louis.id));
+		await db.update(kids).set(updateData).where(eq(kids.id, louis.id));
 	}
 
 	// Add weekly allowance
@@ -50,8 +52,9 @@ export class PocketMoneyService {
 		const newBalance = louis.currentBalance + louis.weeklyAllowance;
 
 		// Update balance
-		await db.update(kids)
-			.set({ 
+		await db
+			.update(kids)
+			.set({
 				currentBalance: newBalance,
 				updatedAt: new Date()
 			})
@@ -77,8 +80,9 @@ export class PocketMoneyService {
 		const newBalance = louis.currentBalance + interestAmount;
 
 		// Update balance
-		await db.update(kids)
-			.set({ 
+		await db
+			.update(kids)
+			.set({
 				currentBalance: newBalance,
 				updatedAt: new Date()
 			})
@@ -106,8 +110,9 @@ export class PocketMoneyService {
 		const newBalance = louis.currentBalance - amount;
 
 		// Update balance
-		await db.update(kids)
-			.set({ 
+		await db
+			.update(kids)
+			.set({
 				currentBalance: newBalance,
 				updatedAt: new Date()
 			})
@@ -129,7 +134,8 @@ export class PocketMoneyService {
 		const louis = await this.getLouis();
 		if (!louis) throw new Error('Louis not found');
 
-		return await db.select()
+		return await db
+			.select()
 			.from(transactions)
 			.where(eq(transactions.kidId, louis.id))
 			.orderBy(desc(transactions.createdAt))
@@ -147,19 +153,20 @@ export class PocketMoneyService {
 		const louis = await this.getLouis();
 		if (!louis) return false;
 
-		const lastWeeklyPayment = await db.select()
+		const lastWeeklyPayment = await db
+			.select()
 			.from(transactions)
-			.where(eq(transactions.kidId, louis.id))
-			.where(eq(transactions.type, 'weekly_allowance'))
+			.where(and(eq(transactions.kidId, louis.id), eq(transactions.type, 'weekly_allowance')))
 			.orderBy(desc(transactions.createdAt))
-			.limit(1)
-			.get();
+			.limit(1);
 
-		if (!lastWeeklyPayment) return true; // No previous payment
+		if (lastWeeklyPayment.length === 0) return true; // No previous payment
 
-		const lastPaymentDate = new Date(lastWeeklyPayment.createdAt!);
+		const lastPaymentDate = new Date(lastWeeklyPayment[0].createdAt!);
 		const now = new Date();
-		const daysSinceLastPayment = Math.floor((now.getTime() - lastPaymentDate.getTime()) / (1000 * 60 * 60 * 24));
+		const daysSinceLastPayment = Math.floor(
+			(now.getTime() - lastPaymentDate.getTime()) / (1000 * 60 * 60 * 24)
+		);
 
 		return daysSinceLastPayment >= 7;
 	}
@@ -169,24 +176,28 @@ export class PocketMoneyService {
 		const louis = await this.getLouis();
 		if (!louis) return false;
 
-		const lastInterestPayment = await db.select()
+		const lastInterestPayment = await db
+			.select()
 			.from(transactions)
-			.where(eq(transactions.kidId, louis.id))
-			.where(eq(transactions.type, 'interest'))
+			.where(and(eq(transactions.kidId, louis.id), eq(transactions.type, 'interest')))
 			.orderBy(desc(transactions.createdAt))
-			.limit(1)
-			.get();
+			.limit(1);
 
-		if (!lastInterestPayment) {
+		if (lastInterestPayment.length === 0) {
 			// Check if account is at least a month old
-			const accountAge = Math.floor((new Date().getTime() - new Date(louis.createdAt!).getTime()) / (1000 * 60 * 60 * 24));
+			const accountAge = Math.floor(
+				(new Date().getTime() - new Date(louis.createdAt!).getTime()) / (1000 * 60 * 60 * 24)
+			);
 			return accountAge >= 30;
 		}
 
-		const lastPaymentDate = new Date(lastInterestPayment.createdAt!);
+		const lastPaymentDate = new Date(lastInterestPayment[0].createdAt!);
 		const now = new Date();
-		
+
 		// Check if it's a new month
-		return lastPaymentDate.getMonth() !== now.getMonth() || lastPaymentDate.getFullYear() !== now.getFullYear();
+		return (
+			lastPaymentDate.getMonth() !== now.getMonth() ||
+			lastPaymentDate.getFullYear() !== now.getFullYear()
+		);
 	}
 }

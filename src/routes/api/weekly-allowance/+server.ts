@@ -6,28 +6,31 @@ export const POST: RequestHandler = async () => {
 	try {
 		// Check if weekly allowance is due
 		const isDue = await PocketMoneyService.isWeeklyAllowanceDue();
-		
+
 		if (!isDue) {
-			return json({ 
-				success: false, 
-				message: 'Weekly allowance is not due yet' 
+			return json({
+				success: false,
+				message: 'Weekly allowance is not due yet'
 			});
 		}
 
 		// Add weekly allowance
 		const newBalance = await PocketMoneyService.addWeeklyAllowance();
-		
-		return json({ 
-			success: true, 
+
+		return json({
+			success: true,
 			message: 'Weekly allowance added successfully',
-			newBalance 
+			newBalance
 		});
 	} catch (error) {
 		console.error('Error adding weekly allowance:', error);
-		return json({ 
-			success: false, 
-			error: (error as Error).message 
-		}, { status: 500 });
+		return json(
+			{
+				success: false,
+				error: (error as Error).message
+			},
+			{ status: 500 }
+		);
 	}
 };
 
@@ -36,17 +39,20 @@ export const GET: RequestHandler = async () => {
 	try {
 		const isDue = await PocketMoneyService.isWeeklyAllowanceDue();
 		const louis = await PocketMoneyService.getLouis();
-		
-		return json({ 
+
+		return json({
 			isDue,
 			currentBalance: louis?.currentBalance ?? 0,
 			weeklyAllowance: louis?.weeklyAllowance ?? 0
 		});
 	} catch (error) {
 		console.error('Error checking weekly allowance status:', error);
-		return json({ 
-			success: false, 
-			error: (error as Error).message 
-		}, { status: 500 });
+		return json(
+			{
+				success: false,
+				error: (error as Error).message
+			},
+			{ status: 500 }
+		);
 	}
 };

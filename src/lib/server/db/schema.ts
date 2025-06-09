@@ -13,7 +13,9 @@ export const kids = sqliteTable('kids', {
 
 export const transactions = sqliteTable('transactions', {
 	id: integer('id').primaryKey(),
-	kidId: integer('kid_id').notNull().references(() => kids.id),
+	kidId: integer('kid_id')
+		.notNull()
+		.references(() => kids.id),
 	type: text('type', { enum: ['weekly_allowance', 'interest', 'withdrawal'] }).notNull(),
 	amount: real('amount').notNull(), // Positive for income, negative for withdrawals
 	description: text('description'), // Optional description, mainly for withdrawals

@@ -1,11 +1,15 @@
 import { PocketMoneyService } from '$lib/server/pocketMoney';
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import type { Kid, Transaction } from '$lib/server/db/schema';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (): Promise<{
+	louis: Kid | undefined;
+	transactions: Transaction[];
+}> => {
 	// Initialize Louis if he doesn't exist
 	await PocketMoneyService.initializeLouis();
-	
+
 	const [louis, transactions] = await Promise.all([
 		PocketMoneyService.getLouis(),
 		PocketMoneyService.getTransactionHistory(20)
@@ -72,11 +76,11 @@ export const actions: Actions = {
 	addInterest: async () => {
 		try {
 			const result = await PocketMoneyService.addMonthlyInterest();
-			return { 
-				success: true, 
+			return {
+				success: true,
 				newBalance: result.newBalance,
 				interestAmount: result.interestAmount,
-				message: 'Monthly interest added successfully' 
+				message: 'Monthly interest added successfully'
 			};
 		} catch (error) {
 			return fail(400, { error: (error as Error).message });
