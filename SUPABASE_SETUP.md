@@ -1,6 +1,6 @@
-# Supabase Migration Setup
+# Supabase Setup with Authentication
 
-This guide will help you migrate your Taschengeld app from SQLite/Drizzle to Supabase.
+This guide will help you set up Supabase for the Taschengeld app with user authentication and role-based access control.
 
 ## Prerequisites
 
@@ -15,7 +15,14 @@ This guide will help you migrate your Taschengeld app from SQLite/Drizzle to Sup
    - **Project URL** (looks like: `https://your-project-ref.supabase.co`)
    - **Anon public key** (starts with `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`)
 
-## Step 2: Update Environment Variables
+## Step 2: Configure Authentication
+
+1. In your Supabase project dashboard, go to **Authentication** → **Settings**
+2. Under **Site URL**, add your development URL: `http://localhost:5173`
+3. Under **Redirect URLs**, add: `http://localhost:5173/auth/callback`
+4. For production, add your production URLs as well
+
+## Step 3: Update Environment Variables
 
 1. Copy your `.env.example` to `.env`:
    ```bash
@@ -24,44 +31,63 @@ This guide will help you migrate your Taschengeld app from SQLite/Drizzle to Sup
 
 2. Update your `.env` file with your Supabase credentials:
    ```env
-   # Supabase Configuration
+   # Supabase Configuration (Server-side)
    SUPABASE_URL=https://your-project-ref.supabase.co
    SUPABASE_ANON_KEY=your-anon-key-here
+   
+   # Supabase Configuration (Client-side - these will be exposed to the browser)
+   PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+   PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
    
    # Legacy - can be removed after migration
    DATABASE_URL=file:local.db
    ```
 
-## Step 3: Set Up Database Schema
+## Step 4: Set Up Database Schema
 
 1. In your Supabase project dashboard, go to **SQL Editor**
 2. Copy and paste the contents of `supabase/schema.sql`
 3. Click **Run** to execute the SQL
 
 This will create:
-- `kids` table for storing child information
+- `profiles` table for user profiles with roles (parent/kid)
+- `kids` table for storing child information (linked to user profiles)
 - `transactions` table for storing all financial transactions
 - Proper indexes for performance
-- Row Level Security policies (ready for future auth)
-- Initial Louis record
+- Row Level Security policies for secure access control
+- Authentication triggers and functions
+- Initial Louis record (for legacy support)
 
-## Step 4: Verify Migration
-
-The app is already configured to use the new Supabase service. You can now:
+## Step 5: Test Authentication
 
 1. Start your development server:
    ```bash
    pnpm dev
    ```
 
-2. Test the following features:
-   - View Louis's current balance
-   - Add weekly allowance
-   - Add monthly interest
-   - Make withdrawals
-   - View transaction history
+2. Visit `http://localhost:5173` and test:
+   - Creating a new account (try both parent and kid roles)
+   - Signing in with existing credentials
+   - Role-based page access (kids vs parents)
 
-## Step 5: Data Migration (Optional)
+## Step 6: Verify Full Functionality
+
+The app now uses Supabase with full authentication. Test the following features:
+
+**As a Kid:**
+- View your current balance and transaction history
+- Make withdrawals from your account
+- See weekly allowance and interest deposits
+
+**As a Parent:**
+- View all kids' accounts and balances
+- Add weekly allowances to all kids
+- Add monthly interest to all accounts
+- Manage kid settings (allowance amounts, interest rates)
+- View all transaction history across accounts
+- Add new kids to the system
+
+## Step 7: Data Migration (Optional)
 
 If you have existing data in your SQLite database that you want to migrate:
 
@@ -77,7 +103,7 @@ If you have existing data in your SQLite database that you want to migrate:
    - Update Louis's record with current balance/settings
    - Add historical transactions to the `transactions` table
 
-## Step 6: Clean Up (After Verification)
+## Step 8: Clean Up (After Verification)
 
 Once you've verified everything works correctly:
 
@@ -117,10 +143,23 @@ The following API endpoints are available for automation/cron jobs:
 
 ## Database Schema
 
-### Kids Table
+### Profiles Table (User Authentication)
+```sql
+CREATE TABLE profiles (
+    id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+    email TEXT NOT NULL,
+    full_name TEXT,
+    role user_role NOT NULL DEFAULT 'kid', -- 'parent' or 'kid'
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### Kids Table (Enhanced with User Links)
 ```sql
 CREATE TABLE kids (
     id BIGSERIAL PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
     weekly_allowance DECIMAL(10,2) NOT NULL DEFAULT 0,
     interest_rate DECIMAL(5,4) NOT NULL DEFAULT 0,
@@ -130,7 +169,7 @@ CREATE TABLE kids (
 );
 ```
 
-### Transactions Table
+### Transactions Table (Unchanged)
 ```sql
 CREATE TABLE transactions (
     id BIGSERIAL PRIMARY KEY,
@@ -141,6 +180,13 @@ CREATE TABLE transactions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
+
+## Authentication Features
+
+- **Role-based Access Control**: Parents can see everything, kids can only see their own data
+- **Secure Withdrawals**: Only kids can withdraw from their own accounts
+- **Protected Routes**: Authentication required for all money management features
+- **User Profiles**: Automatic profile creation with role assignment on signup
 
 ## Troubleshooting
 
@@ -168,15 +214,34 @@ const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
 })
 ```
 
+## User Roles and Permissions
+
+### Kid Role
+- ✅ View their own balance and transaction history
+- ✅ Make withdrawals from their account
+- ✅ See allowance and interest payments
+- ❌ Cannot access other kids' accounts
+- ❌ Cannot add allowances or interest
+- ❌ Cannot modify account settings
+
+### Parent Role  
+- ✅ View all kids' accounts and balances
+- ✅ Add weekly allowances to all accounts
+- ✅ Add monthly interest to all accounts
+- ✅ Manage kid settings (allowance amounts, interest rates)
+- ✅ View complete transaction history
+- ✅ Add new kids to the system
+- ❌ Cannot make withdrawals (kids must do this themselves)
+
 ## Next Steps
 
-After successfully migrating to Supabase:
+Now that authentication is set up:
 
-1. **Add Authentication**: Implement user registration/login
-2. **Multi-user Support**: Modify schema to support multiple families
-3. **Real-time Updates**: Use Supabase real-time features
-4. **File Storage**: Add receipt/image uploads for transactions
-5. **Email Notifications**: Set up automated allowance/interest notifications
+1. **Multi-family Support**: Extend to support multiple families/households
+2. **Real-time Updates**: Use Supabase real-time features for live balance updates
+3. **Email Notifications**: Set up automated allowance/interest notifications
+4. **Mobile App**: Consider building a mobile version with the same backend
+5. **Advanced Features**: Add goals, savings targets, or spending categories
 
 ## Support
 

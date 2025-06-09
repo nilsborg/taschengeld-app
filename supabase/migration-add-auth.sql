@@ -1,11 +1,18 @@
+-- Migration to add authentication to existing Taschengeld database
+-- Run this if you already have a 'kids' table and want to add authentication
+
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create custom user roles enum
-CREATE TYPE user_role AS ENUM ('parent', 'kid');
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM ('parent', 'kid');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Create profiles table to extend Supabase auth.users
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
     id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
     email TEXT NOT NULL,
     full_name TEXT,
@@ -14,35 +21,18 @@ CREATE TABLE profiles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Create kids table
-CREATE TABLE kids (
-    id BIGSERIAL PRIMARY KEY,
-    user_id UUID REFERENCES profiles(id) ON DELETE SET NULL, -- Link to user profile (nullable for existing data)
-    name TEXT NOT NULL,
-    weekly_allowance DECIMAL(10,2) NOT NULL DEFAULT 0,
-    interest_rate DECIMAL(5,4) NOT NULL DEFAULT 0, -- Monthly interest rate as decimal (e.g., 0.01 for 1%)
-    current_balance DECIMAL(10,2) NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- Add user_id column to existing kids table if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'kids' AND column_name = 'user_id') THEN
+        ALTER TABLE kids ADD COLUMN user_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
--- Create transactions table
-CREATE TABLE transactions (
-    id BIGSERIAL PRIMARY KEY,
-    kid_id BIGINT NOT NULL REFERENCES kids(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK (type IN ('weekly_allowance', 'interest', 'withdrawal')),
-    amount DECIMAL(10,2) NOT NULL, -- Positive for income, negative for withdrawals
-    description TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Create indexes for better performance
-CREATE INDEX idx_profiles_role ON profiles(role);
-CREATE INDEX idx_kids_name ON kids(name);
-CREATE INDEX idx_kids_user_id ON kids(user_id);
-CREATE INDEX idx_transactions_kid_id ON transactions(kid_id);
-CREATE INDEX idx_transactions_created_at ON transactions(created_at DESC);
-CREATE INDEX idx_transactions_type ON transactions(type);
+-- Create indexes for better performance (only if they don't exist)
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+CREATE INDEX IF NOT EXISTS idx_kids_user_id ON kids(user_id);
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -53,16 +43,16 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Create triggers to automatically update updated_at
-CREATE TRIGGER update_profiles_updated_at 
-    BEFORE UPDATE ON profiles 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_kids_updated_at 
-    BEFORE UPDATE ON kids 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_updated_at_column();
+-- Create trigger for profiles table if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_profiles_updated_at') THEN
+        CREATE TRIGGER update_profiles_updated_at 
+            BEFORE UPDATE ON profiles 
+            FOR EACH ROW 
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END $$;
 
 -- Function to handle new user registration
 CREATE OR REPLACE FUNCTION handle_new_user() 
@@ -75,20 +65,27 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger to create profile on user signup
+-- Create trigger to create profile on user signup (replace if exists)
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION handle_new_user();
-
--- Insert initial data for Louis (optional - can be done via the app)
-INSERT INTO kids (name, weekly_allowance, interest_rate, current_balance) 
-VALUES ('Louis', 10.00, 0.01, 0.00)
-ON CONFLICT DO NOTHING;
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE kids ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist (to avoid conflicts)
+DROP POLICY IF EXISTS "Users can view their own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
+DROP POLICY IF EXISTS "Kids can view their own data" ON kids;
+DROP POLICY IF EXISTS "Only parents can modify kids data" ON kids;
+DROP POLICY IF EXISTS "Kids can view their own transactions" ON transactions;
+DROP POLICY IF EXISTS "Kids can create withdrawals for themselves" ON transactions;
+DROP POLICY IF EXISTS "Parents can create any transaction" ON transactions;
+DROP POLICY IF EXISTS "Allow all operations on kids" ON kids;
+DROP POLICY IF EXISTS "Allow all operations on transactions" ON transactions;
 
 -- Profiles policies
 CREATE POLICY "Users can view their own profile" ON profiles
@@ -104,7 +101,8 @@ CREATE POLICY "Kids can view their own data" ON kids
         EXISTS (
             SELECT 1 FROM profiles 
             WHERE id = auth.uid() AND role = 'parent'
-        )
+        ) OR
+        user_id IS NULL  -- Allow access to legacy records without user_id
     );
 
 CREATE POLICY "Only parents can modify kids data" ON kids
@@ -120,7 +118,7 @@ CREATE POLICY "Kids can view their own transactions" ON transactions
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM kids 
-            WHERE id = transactions.kid_id AND user_id = auth.uid()
+            WHERE id = transactions.kid_id AND (user_id = auth.uid() OR user_id IS NULL)
         ) OR
         EXISTS (
             SELECT 1 FROM profiles 
@@ -131,10 +129,15 @@ CREATE POLICY "Kids can view their own transactions" ON transactions
 CREATE POLICY "Kids can create withdrawals for themselves" ON transactions
     FOR INSERT WITH CHECK (
         type = 'withdrawal' AND
-        EXISTS (
+        (EXISTS (
             SELECT 1 FROM kids 
             WHERE id = transactions.kid_id AND user_id = auth.uid()
-        )
+        ) OR 
+        -- Allow withdrawals for legacy records (kids without user_id)
+        EXISTS (
+            SELECT 1 FROM kids 
+            WHERE id = transactions.kid_id AND user_id IS NULL
+        ))
     );
 
 CREATE POLICY "Parents can create any transaction" ON transactions
@@ -153,3 +156,15 @@ GRANT ALL ON transactions TO authenticated;
 -- Grant usage on sequences
 GRANT USAGE, SELECT ON SEQUENCE kids_id_seq TO authenticated;
 GRANT USAGE, SELECT ON SEQUENCE transactions_id_seq TO authenticated;
+
+-- Display success message
+DO $$
+BEGIN
+    RAISE NOTICE 'Authentication migration completed successfully!';
+    RAISE NOTICE 'You can now:';
+    RAISE NOTICE '1. Create parent and kid accounts via the app';
+    RAISE NOTICE '2. Link existing kids to user accounts';
+    RAISE NOTICE '3. Use role-based access control';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Note: Existing kids records will remain accessible until linked to user accounts.';
+END $$;
