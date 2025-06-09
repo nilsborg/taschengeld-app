@@ -1,63 +1,12 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
 	import type { Kid, Transaction } from '$lib/server/supabase';
+	import BalanceCard from '$lib/components/BalanceCard.svelte';
+	import WithdrawalForm from '$lib/components/WithdrawalForm.svelte';
+	import ManualActions from '$lib/components/ManualActions.svelte';
+	import Settings from '$lib/components/Settings.svelte';
+	import TransactionHistory from '$lib/components/TransactionHistory.svelte';
 
 	let { data }: { data: { louis?: Kid; transactions?: Transaction[] } } = $props();
-
-	// Loading states for each form
-	let withdrawLoading = $state(false);
-	let weeklyAllowanceLoading = $state(false);
-	let interestLoading = $state(false);
-	let settingsLoading = $state(false);
-
-	// Format currency
-	function formatCurrency(amount: number): string {
-		return new Intl.NumberFormat('de-DE', {
-			style: 'currency',
-			currency: 'EUR'
-		}).format(amount);
-	}
-
-	// Format date
-	function formatDate(timestamp: string | Date | null): string {
-		if (!timestamp) return '';
-		const date = new Date(timestamp);
-		return date.toLocaleDateString('de-DE', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
-
-	// Get transaction type display
-	function getTransactionTypeDisplay(type: string): string {
-		switch (type) {
-			case 'weekly_allowance':
-				return 'Wöchentliches Taschengeld';
-			case 'interest':
-				return 'Zinsen';
-			case 'withdrawal':
-				return 'Ausgabe';
-			default:
-				return type;
-		}
-	}
-
-	// Get transaction color class
-	function getTransactionColor(type: string): string {
-		switch (type) {
-			case 'weekly_allowance':
-				return 'text-green-600';
-			case 'interest':
-				return 'text-blue-600';
-			case 'withdrawal':
-				return 'text-red-600';
-			default:
-				return 'text-gray-600';
-		}
-	}
 </script>
 
 <svelte:head>
@@ -71,235 +20,25 @@
 			<p class="mt-2 text-gray-600">Verwalte dein Taschengeld</p>
 		</header>
 
-		<!-- Current Balance Card -->
-		<section class="mb-8 rounded-lg bg-white p-6 shadow-md">
-			<h2 class="mb-4 text-xl font-semibold text-gray-800">Aktueller Kontostand</h2>
-			<div class="text-center">
-				<div class="mb-2 text-4xl font-bold text-green-600">
-					{formatCurrency(data.louis?.current_balance ?? 0)}
-				</div>
-				<p class="text-gray-600">Verfügbares Guthaben</p>
-			</div>
-		</section>
+		<!-- Current Balance -->
+		<BalanceCard louis={data.louis} />
 
 		<div class="grid grid-cols-1 gap-8 lg:grid-cols-2">
 			<!-- Actions Section -->
 			<section class="space-y-6">
 				<!-- Withdrawal Form -->
-				<div class="rounded-lg bg-white p-6 shadow-md">
-					<h2 class="mb-4 text-xl font-semibold text-gray-800">Geld ausgeben</h2>
-					<form 
-						method="POST" 
-						action="?/withdraw" 
-						use:enhance={() => {
-							withdrawLoading = true;
-							return async ({ update }) => {
-								await update();
-								withdrawLoading = false;
-							};
-						}}
-					>
-						<div class="space-y-4">
-							<div>
-								<label for="amount" class="mb-1 block text-sm font-medium text-gray-700">
-									Betrag (€)
-								</label>
-								<input
-									type="number"
-									id="amount"
-									name="amount"
-									step="0.01"
-									min="0.01"
-									max={data.louis?.current_balance ?? 0}
-									class="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-									required
-								/>
-							</div>
-							<div>
-								<label for="description" class="mb-1 block text-sm font-medium text-gray-700">
-									Wofür?
-								</label>
-								<input
-									type="text"
-									id="description"
-									name="description"
-									placeholder="z.B. Süßigkeiten, Spielzeug..."
-									class="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-									required
-								/>
-							</div>
-							<button
-								type="submit"
-								disabled={withdrawLoading}
-								class="w-full rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-							>
-								{#if withdrawLoading}
-									<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-									</svg>
-								{/if}
-								{withdrawLoading ? 'Wird verarbeitet...' : 'Geld ausgeben'}
-							</button>
-						</div>
-					</form>
-				</div>
+				<WithdrawalForm louis={data.louis} />
 
 				<!-- Manual Actions -->
-				<div class="rounded-lg bg-white p-6 shadow-md">
-					<h2 class="mb-4 text-xl font-semibold text-gray-800">Manuelle Aktionen</h2>
-					<div class="space-y-3">
-						<form 
-							method="POST" 
-							action="?/addWeeklyAllowance" 
-							use:enhance={() => {
-								weeklyAllowanceLoading = true;
-								return async ({ update }) => {
-									await update();
-									weeklyAllowanceLoading = false;
-								};
-							}}
-						>
-							<button
-								type="submit"
-								disabled={weeklyAllowanceLoading}
-								class="w-full rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-							>
-								{#if weeklyAllowanceLoading}
-									<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-									</svg>
-								{/if}
-								{weeklyAllowanceLoading ? 'Wird hinzugefügt...' : 'Wöchentliches Taschengeld hinzufügen'}
-							</button>
-						</form>
-						<form 
-							method="POST" 
-							action="?/addInterest" 
-							use:enhance={() => {
-								interestLoading = true;
-								return async ({ update }) => {
-									await update();
-									interestLoading = false;
-								};
-							}}
-						>
-							<button
-								type="submit"
-								disabled={interestLoading}
-								class="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-							>
-								{#if interestLoading}
-									<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-									</svg>
-								{/if}
-								{interestLoading ? 'Wird hinzugefügt...' : 'Monatliche Zinsen hinzufügen'}
-							</button>
-						</form>
-					</div>
-				</div>
+				<ManualActions />
 
 				<!-- Settings -->
-				<div class="rounded-lg bg-white p-6 shadow-md">
-					<h2 class="mb-4 text-xl font-semibold text-gray-800">Einstellungen</h2>
-					<form 
-						method="POST" 
-						action="?/updateSettings" 
-						use:enhance={() => {
-							settingsLoading = true;
-							return async ({ update }) => {
-								await update();
-								settingsLoading = false;
-							};
-						}}
-					>
-						<div class="space-y-4">
-							<div>
-								<label for="weeklyAllowance" class="mb-1 block text-sm font-medium text-gray-700">
-									Wöchentliches Taschengeld (€)
-								</label>
-								<input
-									type="number"
-									id="weeklyAllowance"
-									name="weeklyAllowance"
-									step="0.01"
-									min="0"
-									value={data.louis?.weekly_allowance ?? 10}
-									class="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-									required
-								/>
-							</div>
-							<div>
-								<label for="interestRate" class="mb-1 block text-sm font-medium text-gray-700">
-									Monatlicher Zinssatz (%)
-								</label>
-								<input
-									type="number"
-									id="interestRate"
-									name="interestRate"
-									step="0.01"
-									min="0"
-									value={((data.louis?.interest_rate ?? 0.01) * 100).toFixed(2)}
-									class="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-									required
-								/>
-							</div>
-							<button
-								type="submit"
-								disabled={settingsLoading}
-								class="w-full rounded-md bg-gray-600 px-4 py-2 text-white hover:bg-gray-700 focus:ring-2 focus:ring-gray-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-							>
-								{#if settingsLoading}
-									<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-									</svg>
-								{/if}
-								{settingsLoading ? 'Wird gespeichert...' : 'Einstellungen speichern'}
-							</button>
-						</div>
-					</form>
-				</div>
+				<Settings louis={data.louis} />
 			</section>
 
 			<!-- Transaction History -->
-			<section class="rounded-lg bg-white p-6 shadow-md">
-				<h2 class="mb-4 text-xl font-semibold text-gray-800">Verlauf</h2>
-				{#if data.transactions && data.transactions.length > 0}
-					<div class="max-h-96 space-y-3 overflow-y-auto">
-						{#each data.transactions as transaction (transaction.id)}
-							<div class="border-b border-gray-200 pb-3 last:border-b-0">
-								<div class="flex items-start justify-between">
-									<div class="flex-1">
-										<div class="font-medium {getTransactionColor(transaction.type)}">
-											{getTransactionTypeDisplay(transaction.type)}
-										</div>
-										{#if transaction.description}
-											<div class="mt-1 text-sm text-gray-600">
-												{transaction.description}
-											</div>
-										{/if}
-										<div class="mt-1 text-xs text-gray-500">
-											{formatDate(transaction.created_at)}
-										</div>
-									</div>
-									<div
-										class="font-semibold {transaction.amount >= 0
-											? 'text-green-600'
-											: 'text-red-600'}"
-									>
-										{transaction.amount >= 0 ? '+' : ''}{formatCurrency(transaction.amount)}
-									</div>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<p class="py-8 text-center text-gray-500">Noch keine Transaktionen vorhanden.</p>
-				{/if}
+			<section>
+				<TransactionHistory transactions={data.transactions} />
 			</section>
 		</div>
 
