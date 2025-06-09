@@ -25,6 +25,7 @@ export interface Profile {
 export interface Kid {
 	id: number;
 	user_id: string | null;
+	parent_id: string;
 	name: string;
 	weekly_allowance: number;
 	interest_rate: number;
@@ -36,7 +37,7 @@ export interface Kid {
 export interface Transaction {
 	id: number;
 	kid_id: number;
-	type: 'weekly_allowance' | 'interest' | 'withdrawal';
+	type: 'weekly_allowance' | 'interest' | 'withdrawal' | 'allowance_change' | 'interest_rate_change';
 	amount: number;
 	description: string | null;
 	created_at: string;
@@ -48,11 +49,12 @@ export interface NewKid {
 	interest_rate: number;
 	current_balance?: number;
 	user_id?: string;
+	parent_id: string;
 }
 
 export interface NewTransaction {
 	kid_id: number;
-	type: 'weekly_allowance' | 'interest' | 'withdrawal';
+	type: 'weekly_allowance' | 'interest' | 'withdrawal' | 'allowance_change' | 'interest_rate_change';
 	amount: number;
 	description?: string | null;
 }

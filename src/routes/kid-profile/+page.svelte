@@ -1,61 +1,93 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { supabase } from '$lib/supabase';
-	import { getUser } from '$lib/stores/auth.svelte';
-	import type { Kid, Transaction } from '$lib/supabase';
+	import { getUser, isParent } from '$lib/stores/auth.svelte';
+	import type { Kid, TransactionWithKid } from '$lib/supabase';
 
-	let kidData = $state<Kid | null>(null);
-	let transactions = $state<Transaction[]>([]);
+	let kid = $state<Kid | null>(null);
+	let transactions = $state<TransactionWithKid[]>([]);
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
-	let withdrawalAmount = $state('');
-	let withdrawalDescription = $state('');
-	let isWithdrawing = $state(false);
-	let withdrawalError = $state<string | null>(null);
+
+	// Get kid_id from URL params
+	let kidId = $state<number | null>(null);
 
 	onMount(async () => {
+		// Check if user is a parent
+		if (!isParent()) {
+			goto('/');
+			return;
+		}
+
+		const kidIdParam = $page.url.searchParams.get('kid_id');
+		if (!kidIdParam) {
+			error = 'No kid ID provided';
+			isLoading = false;
+			return;
+		}
+
+		kidId = parseInt(kidIdParam);
+		if (isNaN(kidId)) {
+			error = 'Invalid kid ID';
+			isLoading = false;
+			return;
+		}
+
 		await loadKidData();
 		await loadTransactions();
 	});
 
 	async function loadKidData() {
 		const currentUser = getUser();
-		if (!currentUser) return;
+		if (!currentUser || !kidId) {
+			error = 'Not authenticated or no kid ID';
+			return;
+		}
 
 		try {
-			const { data: kids, error: kidError } = await supabase
+			const { data, error: kidError } = await supabase
 				.from('kids')
 				.select('*')
-				.eq('user_id', currentUser.id)
+				.eq('id', kidId)
+				.eq('parent_id', currentUser.id)
 				.single();
 
 			if (kidError) {
 				if (kidError.code === 'PGRST116') {
-					// No kid record found - this means the parent hasn't created a kid account yet
-					error = 'No account found. Please ask your parent to create your account first.';
-					return;
+					error = 'Kid not found or access denied';
 				} else {
 					throw kidError;
 				}
-			} else {
-				kidData = kids;
+				return;
 			}
+
+			kid = data;
 		} catch (err) {
 			console.error('Error loading kid data:', err);
-			error = 'Failed to load account data';
+			error = 'Failed to load kid data';
 		}
 	}
 
 	async function loadTransactions() {
-		if (!kidData) return;
+		const currentUser = getUser();
+		if (!currentUser || !kidId) {
+			error = 'Not authenticated or no kid ID';
+			return;
+		}
 
 		try {
 			const { data, error: transactionError } = await supabase
 				.from('transactions')
-				.select('*')
-				.eq('kid_id', kidData.id)
+				.select(`
+					*,
+					kids!inner (name, parent_id)
+				`)
+				.eq('kid_id', kidId)
+				.eq('kids.parent_id', currentUser.id)
 				.order('created_at', { ascending: false })
-				.limit(50);
+				.limit(100);
 
 			if (transactionError) {
 				throw transactionError;
@@ -67,67 +99,6 @@
 			error = 'Failed to load transactions';
 		} finally {
 			isLoading = false;
-		}
-	}
-
-	async function handleWithdrawal() {
-		if (!kidData || !withdrawalAmount) return;
-
-		const amount = parseFloat(withdrawalAmount);
-		
-		if (isNaN(amount) || amount <= 0) {
-			withdrawalError = 'Please enter a valid amount';
-			return;
-		}
-
-		if (amount > kidData.current_balance) {
-			withdrawalError = 'Insufficient balance';
-			return;
-		}
-
-		isWithdrawing = true;
-		withdrawalError = null;
-
-		try {
-			// Create withdrawal transaction
-			const { data: transaction, error: transactionError } = await supabase
-				.from('transactions')
-				.insert({
-					kid_id: kidData.id,
-					type: 'withdrawal',
-					amount: -amount, // Negative for withdrawal
-					description: withdrawalDescription || 'Withdrawal'
-				})
-				.select()
-				.single();
-
-			if (transactionError) {
-				throw transactionError;
-			}
-
-			// Update kid's balance
-			const newBalance = kidData.current_balance - amount;
-			const { error: updateError } = await supabase
-				.from('kids')
-				.update({ current_balance: newBalance })
-				.eq('id', kidData.id);
-
-			if (updateError) {
-				throw updateError;
-			}
-
-			// Update local state
-			kidData.current_balance = newBalance;
-			transactions = [transaction, ...transactions];
-
-			// Clear form
-			withdrawalAmount = '';
-			withdrawalDescription = '';
-		} catch (err) {
-			console.error('Error processing withdrawal:', err);
-			withdrawalError = 'Failed to process withdrawal';
-		} finally {
-			isWithdrawing = false;
 		}
 	}
 
@@ -182,7 +153,7 @@
 		}
 	}
 
-	function formatTransactionAmount(transaction: Transaction): string {
+	function formatTransactionAmount(transaction: TransactionWithKid): string {
 		const amount = transaction.amount;
 		const type = transaction.type;
 		
@@ -204,13 +175,30 @@
 			}
 		}
 	}
+
+	function goBack() {
+		goto('/parent');
+	}
 </script>
 
 <svelte:head>
-	<title>My Account - Taschengeld App</title>
+	<title>{kid?.name || 'Kid Profile'} - Taschengeld App</title>
 </svelte:head>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+	<!-- Back button -->
+	<div class="mb-6">
+		<button
+			onclick={goBack}
+			class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+		>
+			<svg class="-ml-0.5 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+			</svg>
+			Back to Dashboard
+		</button>
+	</div>
+
 	{#if error}
 		<div class="rounded-md bg-red-50 p-4 mb-6">
 			<div class="flex">
@@ -230,13 +218,13 @@
 		<div class="flex justify-center items-center h-64">
 			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
 		</div>
-	{:else if kidData}
-		<!-- Account Overview -->
+	{:else if kid}
+		<!-- Kid Profile Header -->
 		<div class="bg-white overflow-hidden shadow rounded-lg mb-8">
 			<div class="px-4 py-5 sm:p-6">
-				<h1 class="text-2xl font-bold text-gray-900 mb-4">Welcome, {kidData.name}!</h1>
+				<h1 class="text-3xl font-bold text-gray-900 mb-6">{kid.name}'s Account</h1>
 				
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+				<div class="grid grid-cols-1 md:grid-cols-4 gap-6">
 					<div class="bg-green-50 rounded-lg p-4">
 						<div class="flex items-center">
 							<div class="flex-shrink-0">
@@ -246,7 +234,7 @@
 							</div>
 							<div class="ml-4">
 								<p class="text-sm font-medium text-green-800">Current Balance</p>
-								<p class="text-2xl font-bold text-green-900">{formatCurrency(kidData.current_balance)}</p>
+								<p class="text-2xl font-bold text-green-900">{formatCurrency(kid.current_balance)}</p>
 							</div>
 						</div>
 					</div>
@@ -260,7 +248,7 @@
 							</div>
 							<div class="ml-4">
 								<p class="text-sm font-medium text-blue-800">Weekly Allowance</p>
-								<p class="text-2xl font-bold text-blue-900">{formatCurrency(kidData.weekly_allowance)}</p>
+								<p class="text-2xl font-bold text-blue-900">{formatCurrency(kid.weekly_allowance)}</p>
 							</div>
 						</div>
 					</div>
@@ -274,7 +262,21 @@
 							</div>
 							<div class="ml-4">
 								<p class="text-sm font-medium text-purple-800">Interest Rate</p>
-								<p class="text-2xl font-bold text-purple-900">{(kidData.interest_rate * 100).toFixed(1)}%</p>
+								<p class="text-2xl font-bold text-purple-900">{(kid.interest_rate * 100).toFixed(1)}%</p>
+							</div>
+						</div>
+					</div>
+
+					<div class="bg-gray-50 rounded-lg p-4">
+						<div class="flex items-center">
+							<div class="flex-shrink-0">
+								<svg class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3a4 4 0 118 0v4m-4 8a4 4 0 01-4-4v-4h8v4a4 4 0 01-4 4z" />
+								</svg>
+							</div>
+							<div class="ml-4">
+								<p class="text-sm font-medium text-gray-800">Account Created</p>
+								<p class="text-lg font-semibold text-gray-900">{formatDate(kid.created_at).split(',')[0]}</p>
 							</div>
 						</div>
 					</div>
@@ -282,73 +284,10 @@
 			</div>
 		</div>
 
-		<!-- Withdrawal Form -->
-		<div class="bg-white overflow-hidden shadow rounded-lg mb-8">
-			<div class="px-4 py-5 sm:p-6">
-				<h2 class="text-lg font-semibold text-gray-900 mb-4">Make a Withdrawal</h2>
-				
-				<form onsubmit={(e) => { e.preventDefault(); handleWithdrawal(); }} class="space-y-4">
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div>
-							<label for="amount" class="block text-sm font-medium text-gray-700">Amount</label>
-							<div class="mt-1 relative rounded-md shadow-sm">
-								<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-									<span class="text-gray-500 sm:text-sm">€</span>
-								</div>
-								<input
-									type="number"
-									step="0.01"
-									min="0"
-									max={kidData.current_balance}
-									id="amount"
-									bind:value={withdrawalAmount}
-									class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
-									placeholder="0.00"
-									disabled={isWithdrawing}
-								/>
-							</div>
-						</div>
-
-						<div>
-							<label for="description" class="block text-sm font-medium text-gray-700">Description (optional)</label>
-							<input
-								type="text"
-								id="description"
-								bind:value={withdrawalDescription}
-								class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
-								placeholder="What is this for?"
-								disabled={isWithdrawing}
-							/>
-						</div>
-					</div>
-
-					{#if withdrawalError}
-						<div class="text-red-600 text-sm">{withdrawalError}</div>
-					{/if}
-
-					<button
-						type="submit"
-						disabled={isWithdrawing || !withdrawalAmount || kidData.current_balance <= 0}
-						class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-					>
-						{#if isWithdrawing}
-							<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-							</svg>
-							Processing...
-						{:else}
-							Withdraw Money
-						{/if}
-					</button>
-				</form>
-			</div>
-		</div>
-
 		<!-- Transaction History -->
 		<div class="bg-white overflow-hidden shadow rounded-lg">
 			<div class="px-4 py-5 sm:p-6">
-				<h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Transactions</h2>
+				<h2 class="text-lg font-semibold text-gray-900 mb-4">Transaction History</h2>
 				
 				{#if transactions.length === 0}
 					<p class="text-gray-500 text-center py-8">No transactions yet.</p>

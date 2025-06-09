@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabase';
+	import { getUser } from '$lib/stores/auth.svelte';
 	import type { Kid, TransactionWithKid } from '$lib/supabase';
 
 	let kids = $state<Kid[]>([]);
@@ -35,10 +36,17 @@
 	}
 
 	async function loadKids() {
+		const currentUser = getUser();
+		if (!currentUser) {
+			error = 'Not authenticated';
+			return;
+		}
+
 		try {
 			const { data, error: kidError } = await supabase
 				.from('kids')
 				.select('*')
+				.eq('parent_id', currentUser.id)
 				.order('name');
 
 			if (kidError) {
@@ -53,13 +61,20 @@
 	}
 
 	async function loadAllTransactions() {
+		const currentUser = getUser();
+		if (!currentUser) {
+			error = 'Not authenticated';
+			return;
+		}
+
 		try {
 			const { data, error: transactionError } = await supabase
 				.from('transactions')
 				.select(`
 					*,
-					kids (name)
+					kids!inner (name, parent_id)
 				`)
+				.eq('kids.parent_id', currentUser.id)
 				.order('created_at', { ascending: false })
 				.limit(100);
 
@@ -167,6 +182,12 @@
 	}
 
 	async function addNewKid() {
+		const currentUser = getUser();
+		if (!currentUser) {
+			addKidError = 'Not authenticated';
+			return;
+		}
+
 		if (!newKidName.trim()) {
 			addKidError = 'Please enter a name';
 			return;
@@ -181,8 +202,9 @@
 				.insert({
 					name: newKidName.trim(),
 					weekly_allowance: newKidAllowance,
-					interest_rate: newKidInterestRate / 100, // Convert percentage to decimal
-					current_balance: 0.00
+					interest_rate: newKidInterestRate,
+					current_balance: 0,
+					parent_id: currentUser.id
 				})
 				.select()
 				.single();
@@ -207,6 +229,13 @@
 	}
 
 	async function updateKidSettings(kid: Kid, field: string, value: number) {
+		const oldValue = kid[field as keyof Kid] as number;
+		
+		// Don't update if value hasn't changed
+		if (oldValue === value) {
+			return;
+		}
+
 		try {
 			const { error } = await supabase
 				.from('kids')
@@ -217,11 +246,52 @@
 				throw error;
 			}
 
+			// Create audit log transaction
+			let transactionType: 'allowance_change' | 'interest_rate_change';
+			let description: string;
+			let amount: number;
+
+			if (field === 'weekly_allowance') {
+				transactionType = 'allowance_change';
+				const delta = value - oldValue;
+				description = `Weekly allowance changed from ${formatCurrency(oldValue)} to ${formatCurrency(value)}`;
+				amount = delta; // Store the change amount, not the new value
+			} else if (field === 'interest_rate') {
+				transactionType = 'interest_rate_change';
+				const deltaPercent = (value - oldValue) * 100; // Convert to percentage points
+				description = `Interest rate changed from ${(oldValue * 100).toFixed(1)}% to ${(value * 100).toFixed(1)}%`;
+				amount = deltaPercent; // Store the percentage point change
+			} else {
+				// Unknown field, still log but with generic info
+				transactionType = 'allowance_change';
+				const delta = value - oldValue;
+				description = `Setting '${field}' changed from ${oldValue} to ${value}`;
+				amount = delta;
+			}
+
+			// Insert audit log transaction
+			const { error: transactionError } = await supabase
+				.from('transactions')
+				.insert({
+					kid_id: kid.id,
+					type: transactionType,
+					amount: amount,
+					description: description
+				});
+
+			if (transactionError) {
+				console.error('Error logging settings change:', transactionError);
+				// Don't throw error here - the main update succeeded
+			}
+
 			// Update local state
 			const kidIndex = kids.findIndex(k => k.id === kid.id);
 			if (kidIndex !== -1) {
 				kids[kidIndex] = { ...kids[kidIndex], [field]: value };
 			}
+
+			// Reload transactions to show the new log entry
+			await loadAllTransactions();
 		} catch (err) {
 			console.error('Error updating kid settings:', err);
 		}
@@ -252,6 +322,10 @@
 				return 'Interest';
 			case 'withdrawal':
 				return 'Withdrawal';
+			case 'allowance_change':
+				return 'Allowance Change';
+			case 'interest_rate_change':
+				return 'Interest Rate Change';
 			default:
 				return type;
 		}
@@ -265,8 +339,35 @@
 				return 'text-blue-600';
 			case 'withdrawal':
 				return 'text-red-600';
+			case 'allowance_change':
+				return 'text-orange-600';
+			case 'interest_rate_change':
+				return 'text-purple-600';
 			default:
 				return 'text-gray-600';
+		}
+	}
+
+	function formatTransactionAmount(transaction: TransactionWithKid): string {
+		const amount = transaction.amount;
+		const type = transaction.type;
+		
+		switch (type) {
+			case 'allowance_change': {
+				// Amount is stored as delta in euros
+				const prefix = amount >= 0 ? '+' : '';
+				return `${prefix}${formatCurrency(amount)}`;
+			}
+			case 'interest_rate_change': {
+				// Amount is stored as delta in percentage points
+				const percentPrefix = amount >= 0 ? '+' : '';
+				return `${percentPrefix}${amount.toFixed(1)}%`;
+			}
+			default: {
+				// Regular transactions (weekly_allowance, interest, withdrawal)
+				const regularPrefix = amount >= 0 ? '+' : '';
+				return `${regularPrefix}${formatCurrency(amount)}`;
+			}
 		}
 	}
 
@@ -542,7 +643,7 @@
 											/>%
 										</td>
 										<td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-											<a href="/kid?kid_id={kid.id}" class="text-indigo-600 hover:text-indigo-900">View Details</a>
+											<a href="/kid-profile?kid_id={kid.id}" class="text-indigo-600 hover:text-indigo-900">View Details</a>
 										</td>
 									</tr>
 								{/each}
@@ -590,7 +691,7 @@
 											{transaction.description || '-'}
 										</td>
 										<td class="px-6 py-4 whitespace-nowrap text-sm text-right {getTransactionColor(transaction.type)} font-medium">
-											{transaction.amount >= 0 ? '+' : ''}{formatCurrency(transaction.amount)}
+											{formatTransactionAmount(transaction)}
 										</td>
 									</tr>
 								{/each}

@@ -33,9 +33,9 @@ export function setLoading(val: boolean) {
 }
 
 // Derived state
-let isAuthenticatedState = $derived(!!userState);
-let isParentState = $derived(profileState?.role === 'parent');
-let isKidState = $derived(profileState?.role === 'kid');
+const isAuthenticatedState = $derived(!!userState);
+const isParentState = $derived(profileState?.role === 'parent');
+const isKidState = $derived(profileState?.role === 'kid');
 
 // Export functions that return derived values
 export function isAuthenticated() {
