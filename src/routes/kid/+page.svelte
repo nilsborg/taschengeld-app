@@ -81,6 +81,11 @@
 			return;
 		}
 
+		if (!withdrawalDescription.trim()) {
+			withdrawalError = 'Please enter a description for this withdrawal';
+			return;
+		}
+
 		if (amount > kidData.current_balance) {
 			withdrawalError = 'Insufficient balance';
 			return;
@@ -306,12 +311,13 @@
 									class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
 									placeholder="0.00"
 									disabled={isWithdrawing}
+									required
 								/>
 							</div>
 						</div>
 
 						<div>
-							<label for="description" class="block text-sm font-medium text-gray-700">Description (optional)</label>
+							<label for="description" class="block text-sm font-medium text-gray-700">Description</label>
 							<input
 								type="text"
 								id="description"
@@ -319,6 +325,7 @@
 								class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
 								placeholder="What is this for?"
 								disabled={isWithdrawing}
+								required
 							/>
 						</div>
 					</div>
@@ -329,7 +336,7 @@
 
 					<button
 						type="submit"
-						disabled={isWithdrawing || !withdrawalAmount || kidData.current_balance <= 0}
+						disabled={isWithdrawing}
 						class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
 					>
 						{#if isWithdrawing}
