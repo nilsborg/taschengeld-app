@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { supabase } from '$lib/supabase';
 	import { getUser } from '$lib/stores/auth.svelte';
 	import type { Kid, Transaction } from '$lib/supabase';
@@ -31,8 +32,8 @@
 
 			if (kidError) {
 				if (kidError.code === 'PGRST116') {
-					// No kid record found - this means the parent hasn't created a kid account yet
-					error = 'No account found. Please ask your parent to create your account first.';
+					// No kid record found - redirect to linking page
+					goto('/link-account');
 					return;
 				} else {
 					throw kidError;

@@ -2,10 +2,11 @@
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabase';
 	import { getUser } from '$lib/stores/auth.svelte';
-	import type { Kid, TransactionWithKid } from '$lib/supabase';
+	import type { Kid, TransactionWithKid, KidLinkingRequest } from '$lib/supabase';
 
 	let kids = $state<Kid[]>([]);
 	let transactions = $state<TransactionWithKid[]>([]);
+	let linkingRequests = $state<KidLinkingRequest[]>([]);
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
 	
@@ -31,7 +32,7 @@
 
 	async function loadData() {
 		isLoading = true;
-		await Promise.all([loadKids(), loadAllTransactions()]);
+		await Promise.all([loadKids(), loadAllTransactions(), loadLinkingRequests()]);
 		isLoading = false;
 	}
 
@@ -225,6 +226,137 @@
 			addKidError = 'Failed to add new kid';
 		} finally {
 			isAddingKid = false;
+		}
+	}
+
+	async function loadLinkingRequests() {
+		const currentUser = getUser();
+		if (!currentUser) {
+			error = 'Not authenticated';
+			return;
+		}
+
+		try {
+			const { data, error: requestError } = await supabase
+				.from('kid_linking_requests')
+				.select(`
+					*,
+					kids!inner (name, parent_id),
+					profiles!kid_linking_requests_user_id_fkey (full_name, email)
+				`)
+				.eq('kids.parent_id', currentUser.id)
+				.eq('status', 'pending')
+				.order('requested_at', { ascending: false });
+
+			if (requestError) {
+				throw requestError;
+			}
+
+			linkingRequests = data || [];
+		} catch (err) {
+			console.error('Error loading linking requests:', err);
+		}
+	}
+
+	async function generateInvitationCode(kidId: number) {
+		try {
+			const { data, error } = await supabase.rpc('set_invitation_code_for_kid', {
+				kid_id: kidId
+			});
+
+			if (error) {
+				throw error;
+			}
+
+			// Update local state
+			const kidIndex = kids.findIndex(k => k.id === kidId);
+			if (kidIndex !== -1) {
+				kids[kidIndex] = { ...kids[kidIndex], invitation_code: data };
+			}
+
+			return data;
+		} catch (err) {
+			console.error('Error generating invitation code:', err);
+			throw err;
+		}
+	}
+
+	async function clearInvitationCode(kidId: number) {
+		try {
+			const { error } = await supabase
+				.from('kids')
+				.update({ invitation_code: null })
+				.eq('id', kidId);
+
+			if (error) {
+				throw error;
+			}
+
+			// Update local state
+			const kidIndex = kids.findIndex(k => k.id === kidId);
+			if (kidIndex !== -1) {
+				kids[kidIndex] = { ...kids[kidIndex], invitation_code: null };
+			}
+		} catch (err) {
+			console.error('Error clearing invitation code:', err);
+		}
+	}
+
+	async function approveLinkingRequest(requestId: number) {
+		try {
+			const request = linkingRequests.find(r => r.id === requestId);
+			if (!request) return;
+
+			// Update the linking request status
+			const { error: requestError } = await supabase
+				.from('kid_linking_requests')
+				.update({ 
+					status: 'approved',
+					resolved_at: new Date().toISOString(),
+					resolved_by: getUser()?.id
+				})
+				.eq('id', requestId);
+
+			if (requestError) {
+				throw requestError;
+			}
+
+			// Link the kid account
+			const { error: linkError } = await supabase
+				.from('kids')
+				.update({ user_id: request.user_id })
+				.eq('id', request.kid_id);
+
+			if (linkError) {
+				throw linkError;
+			}
+
+			// Reload data
+			await loadData();
+		} catch (err) {
+			console.error('Error approving linking request:', err);
+		}
+	}
+
+	async function rejectLinkingRequest(requestId: number) {
+		try {
+			const { error } = await supabase
+				.from('kid_linking_requests')
+				.update({ 
+					status: 'rejected',
+					resolved_at: new Date().toISOString(),
+					resolved_by: getUser()?.id
+				})
+				.eq('id', requestId);
+
+			if (error) {
+				throw error;
+			}
+
+			// Remove from local state
+			linkingRequests = linkingRequests.filter(r => r.id !== requestId);
+		} catch (err) {
+			console.error('Error rejecting linking request:', err);
 		}
 	}
 
@@ -610,6 +742,7 @@
 									<th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
 									<th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Weekly Allowance</th>
 									<th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Interest Rate</th>
+									<th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Account Status</th>
 									<th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
 								</tr>
 							</thead>
@@ -642,6 +775,32 @@
 												class="w-16 text-right border-gray-300 rounded-md text-sm"
 											/>%
 										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-center text-sm">
+											{#if kid.user_id}
+												<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+													Linked
+												</span>
+											{:else if kid.invitation_code}
+												<div class="space-y-1">
+													<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+														Code: {kid.invitation_code}
+													</span>
+													<button
+														onclick={() => clearInvitationCode(kid.id)}
+														class="text-xs text-red-600 hover:text-red-900"
+													>
+														Clear
+													</button>
+												</div>
+											{:else}
+												<button
+													onclick={() => generateInvitationCode(kid.id)}
+													class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 hover:bg-gray-200"
+												>
+													Generate Code
+												</button>
+											{/if}
+										</td>
 										<td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
 											<a href="/kid-profile?kid_id={kid.id}" class="text-indigo-600 hover:text-indigo-900">View Details</a>
 										</td>
@@ -653,6 +812,61 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- Linking Requests -->
+		{#if linkingRequests.length > 0}
+			<div class="bg-white shadow rounded-lg mb-8">
+				<div class="px-4 py-5 sm:p-6">
+					<h2 class="text-lg font-semibold text-gray-900 mb-4">Account Linking Requests</h2>
+					<p class="text-sm text-gray-600 mb-4">Kids who have registered and want to link their accounts to your kid records.</p>
+					
+					<div class="overflow-x-auto">
+						<table class="min-w-full divide-y divide-gray-200">
+							<thead class="bg-gray-50">
+								<tr>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kid Name</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User Account</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested At</th>
+									<th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+								</tr>
+							</thead>
+							<tbody class="bg-white divide-y divide-gray-200">
+								{#each linkingRequests as request (request.id)}
+									<tr>
+										<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+											{request.kids?.name || 'Unknown'}
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+											<div>
+												<div class="font-medium">{request.profiles?.full_name || 'Unknown'}</div>
+												<div class="text-gray-500">{request.profiles?.email || 'No email'}</div>
+											</div>
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+											{formatDate(request.requested_at)}
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
+											<button
+												onclick={() => approveLinkingRequest(request.id)}
+												class="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+											>
+												Approve
+											</button>
+											<button
+												onclick={() => rejectLinkingRequest(request.id)}
+												class="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+											>
+												Reject
+											</button>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		{/if}
 
 		<!-- Recent Transactions -->
 		<div class="bg-white shadow rounded-lg">

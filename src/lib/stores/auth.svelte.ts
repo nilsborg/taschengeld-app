@@ -136,6 +136,50 @@ export async function signUp(email: string, password: string, fullName: string, 
 			throw error;
 		}
 
+		// Manual profile creation fallback
+		if (data.user && !error) {
+			// Wait a moment for the user to be fully created
+			await new Promise(resolve => setTimeout(resolve, 1000));
+			
+			try {
+				// Try to create profile directly (skip the check to avoid RLS issues)
+				const { error: profileError } = await supabase
+					.from('profiles')
+					.upsert({
+						id: data.user.id,
+						email: email,
+						full_name: fullName,
+						role: role,
+						created_at: new Date().toISOString(),
+						updated_at: new Date().toISOString()
+					}, {
+						onConflict: 'id'
+					});
+
+				if (profileError) {
+					console.error('Manual profile creation failed:', profileError);
+					
+					// Try alternative approach using the function we created
+					try {
+						const { error: functionError } = await supabase.rpc('create_user_profile', {
+							user_id: data.user.id,
+							user_email: email,
+							user_full_name: fullName,
+							user_role: role
+						});
+						
+						if (functionError) {
+							console.error('Function profile creation failed:', functionError);
+						}
+					} catch (funcError) {
+						console.error('Function call error:', funcError);
+					}
+				}
+			} catch (profileError) {
+				console.error('Profile creation error:', profileError);
+			}
+		}
+
 		return { data, error: null };
 	} catch (error) {
 		console.error('Sign up error:', error);

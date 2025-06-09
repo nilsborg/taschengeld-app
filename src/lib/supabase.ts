@@ -30,6 +30,7 @@ export interface Kid {
 	weekly_allowance: number;
 	interest_rate: number;
 	current_balance: number;
+	invitation_code: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -50,6 +51,7 @@ export interface NewKid {
 	current_balance?: number;
 	user_id?: string;
 	parent_id: string;
+	invitation_code?: string;
 }
 
 export interface NewTransaction {
@@ -63,6 +65,23 @@ export interface TransactionWithKid extends Transaction {
 	kids: {
 		name: string;
 	} | null;
+}
+
+export interface KidLinkingRequest {
+	id: number;
+	kid_id: number;
+	user_id: string;
+	status: 'pending' | 'approved' | 'rejected';
+	requested_at: string;
+	resolved_at: string | null;
+	resolved_by: string | null;
+	kids?: {
+		name: string;
+	};
+	profiles?: {
+		full_name: string | null;
+		email: string;
+	};
 }
 
 // Auth helper functions

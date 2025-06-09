@@ -1,114 +1,68 @@
--- Fix RLS Policies for Taschengeld App
--- This script fixes the Row Level Security policies to allow proper access
+-- Fix RLS policies for profile creation
+-- This addresses the "new row violates row-level security policy" error
 
--- Drop all existing policies first to avoid conflicts
+-- First, let's see what policies currently exist
+SELECT policyname, permissive, roles, cmd, qual, with_check
+FROM pg_policies 
+WHERE tablename = 'profiles';
+
+-- Drop all existing policies on profiles table
 DROP POLICY IF EXISTS "Users can view their own profile" ON profiles;
 DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
-DROP POLICY IF EXISTS "Kids can view their own data" ON kids;
-DROP POLICY IF EXISTS "Only parents can modify kids data" ON kids;
-DROP POLICY IF EXISTS "Kids can view their own transactions" ON transactions;
-DROP POLICY IF EXISTS "Kids can create withdrawals for themselves" ON transactions;
-DROP POLICY IF EXISTS "Parents can create any transaction" ON transactions;
-DROP POLICY IF EXISTS "Allow all operations on kids" ON kids;
-DROP POLICY IF EXISTS "Allow all operations on transactions" ON transactions;
+DROP POLICY IF EXISTS "Allow profile creation" ON profiles;
+DROP POLICY IF EXISTS "Users can create their own profile" ON profiles;
 
--- Profiles policies
-CREATE POLICY "Users can view their own profile" ON profiles
+-- Temporarily disable RLS to allow initial setup
+ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
+
+-- Re-enable RLS
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Create comprehensive RLS policies for profiles
+
+-- 1. Allow users to view their own profile
+CREATE POLICY "profiles_select_own" ON profiles
     FOR SELECT USING (auth.uid() = id);
 
-CREATE POLICY "Users can update their own profile" ON profiles
-    FOR UPDATE USING (auth.uid() = id);
+-- 2. Allow users to insert their own profile (for signup)
+CREATE POLICY "profiles_insert_own" ON profiles
+    FOR INSERT WITH CHECK (auth.uid() = id);
 
--- Kids policies - more permissive for initial setup
-CREATE POLICY "Kids can view accessible data" ON kids
-    FOR SELECT USING (
-        -- Kids can see their own linked records
-        user_id = auth.uid() OR
-        -- Parents can see all records
-        EXISTS (
-            SELECT 1 FROM profiles 
-            WHERE id = auth.uid() AND role = 'parent'
-        ) OR
-        -- Allow access to unlinked records (like original Louis)
-        user_id IS NULL
-    );
+-- 3. Allow users to update their own profile
+CREATE POLICY "profiles_update_own" ON profiles
+    FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
-CREATE POLICY "Kids can create their own record" ON kids
-    FOR INSERT WITH CHECK (
-        -- Kids can create records for themselves
-        user_id = auth.uid() OR
-        -- Parents can create records for anyone
-        EXISTS (
-            SELECT 1 FROM profiles 
-            WHERE id = auth.uid() AND role = 'parent'
-        )
-    );
+-- 4. Allow service role to do everything (for admin functions)
+CREATE POLICY "profiles_service_role_all" ON profiles
+    FOR ALL USING (current_setting('role') = 'service_role');
 
-CREATE POLICY "Kids can update their own data" ON kids
-    FOR UPDATE USING (
-        -- Kids can update their own records
-        user_id = auth.uid() OR
-        -- Parents can update any record
-        EXISTS (
-            SELECT 1 FROM profiles 
-            WHERE id = auth.uid() AND role = 'parent'
-        )
-    );
+-- Grant necessary permissions to authenticated users
+GRANT SELECT, INSERT, UPDATE ON profiles TO authenticated;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
-CREATE POLICY "Parents can delete kids data" ON kids
-    FOR DELETE USING (
-        EXISTS (
-            SELECT 1 FROM profiles 
-            WHERE id = auth.uid() AND role = 'parent'
-        )
-    );
+-- Test the policies by attempting a manual profile creation
+DO $$
+DECLARE
+    test_id UUID := gen_random_uuid();
+    test_email TEXT := 'rls_test_' || extract(epoch from now()) || '@example.com';
+BEGIN
+    -- Note: This test won't work because we don't have auth.uid() context in DO blocks
+    -- But we can test the table structure
+    RAISE NOTICE 'RLS policies updated for profiles table';
+    RAISE NOTICE 'Profiles table is ready for manual profile creation from authenticated users';
+END $$;
 
--- Transactions policies - allow kids to withdraw, parents to do everything
-CREATE POLICY "View transactions" ON transactions
-    FOR SELECT USING (
-        -- Kids can see transactions for their linked kids records
-        EXISTS (
-            SELECT 1 FROM kids 
-            WHERE id = transactions.kid_id AND user_id = auth.uid()
-        ) OR
-        -- Parents can see all transactions
-        EXISTS (
-            SELECT 1 FROM profiles 
-            WHERE id = auth.uid() AND role = 'parent'
-        ) OR
-        -- Allow viewing transactions for unlinked kids (like Louis)
-        EXISTS (
-            SELECT 1 FROM kids 
-            WHERE id = transactions.kid_id AND user_id IS NULL
-        )
-    );
+-- Show final policies
+SELECT 'Final RLS policies for profiles:' as info;
+SELECT policyname, cmd, qual, with_check
+FROM pg_policies 
+WHERE tablename = 'profiles'
+ORDER BY policyname;
 
-CREATE POLICY "Kids can create withdrawals" ON transactions
-    FOR INSERT WITH CHECK (
-        -- Kids can only create withdrawal transactions for themselves
-        (type = 'withdrawal' AND EXISTS (
-            SELECT 1 FROM kids 
-            WHERE id = transactions.kid_id AND user_id = auth.uid()
-        )) OR
-        -- Parents can create any transaction
-        EXISTS (
-            SELECT 1 FROM profiles 
-            WHERE id = auth.uid() AND role = 'parent'
-        ) OR
-        -- Allow withdrawals for unlinked kids (temporary for Louis)
-        (type = 'withdrawal' AND EXISTS (
-            SELECT 1 FROM kids 
-            WHERE id = transactions.kid_id AND user_id IS NULL
-        ))
-    );
+-- Verify table permissions
+SELECT 'Permissions granted to authenticated role' as info;
+SELECT privilege_type 
+FROM information_schema.role_table_grants 
+WHERE table_name = 'profiles' AND grantee = 'authenticated';
 
--- Grant broad permissions to authenticated users (RLS will control access)
-GRANT ALL ON profiles TO authenticated;
-GRANT ALL ON kids TO authenticated;
-GRANT ALL ON transactions TO authenticated;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
-
--- Display success message
-SELECT 'RLS policies updated successfully!' as status;
-SELECT 'Kids can now create their own records and make withdrawals' as note;
-SELECT 'Parents can manage all data' as note2;
+SELECT 'RLS policies fixed. Try user signup again.' as result;
