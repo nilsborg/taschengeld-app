@@ -23,6 +23,7 @@
 	let newKidName = $state('');
 	let newKidAllowance = $state(10.00);
 	let newKidInterestRate = $state(0.01);
+	let newKidInitialBalance = $state('');
 	let isAddingKid = $state(false);
 	let addKidError = $state<string | null>(null);
 
@@ -204,7 +205,7 @@
 					name: newKidName.trim(),
 					weekly_allowance: newKidAllowance,
 					interest_rate: newKidInterestRate,
-					current_balance: 0,
+					current_balance: newKidInitialBalance ? parseFloat(newKidInitialBalance) : 0,
 					parent_id: currentUser.id
 				})
 				.select()
@@ -220,6 +221,7 @@
 			newKidName = '';
 			newKidAllowance = 10.00;
 			newKidInterestRate = 0.01;
+			newKidInitialBalance = '';
 			showAddKidForm = false;
 		} catch (err) {
 			console.error('Error adding new kid:', err);
@@ -651,7 +653,7 @@
 					<h3 class="text-lg font-semibold text-gray-900 mb-4">Add New Kid</h3>
 					
 					<form onsubmit={(e) => { e.preventDefault(); addNewKid(); }} class="space-y-4">
-						<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+						<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
 							<div>
 								<label for="kidName" class="block text-sm font-medium text-gray-700">Name</label>
 								<input
@@ -687,6 +689,20 @@
 									id="kidInterest"
 									bind:value={newKidInterestRate}
 									class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+									disabled={isAddingKid}
+								/>
+							</div>
+
+							<div>
+								<label for="kidInitialBalance" class="block text-sm font-medium text-gray-700">Initial Balance (€)</label>
+								<input
+									type="number"
+									step="0.01"
+									min="0"
+									id="kidInitialBalance"
+									bind:value={newKidInitialBalance}
+									class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+									placeholder="0.00 (optional)"
 									disabled={isAddingKid}
 								/>
 							</div>
