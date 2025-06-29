@@ -1,0 +1,77 @@
+name: Weekly Allowance Automation
+
+on:
+  schedule:
+    # Run every Saturday at 6:00 AM UTC
+    - cron: '0 6 * * 6'
+  workflow_dispatch: # Allow manual triggering for testing
+
+jobs:
+  add-weekly-allowance:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Add Weekly Allowance
+        env:
+          # Set your production URL as a GitHub secret
+          API_BASE_URL: ${{ secrets.API_BASE_URL || 'https://your-app-domain.vercel.app' }}
+        run: |
+          echo "🏦 Checking if weekly allowance is due..."
+
+          # First check if allowance is due
+          check_response=$(curl -s -w "%{http_code}" -o /tmp/check_response.json "$API_BASE_URL/api/weekly-allowance")
+          check_status_code="${check_response: -3}"
+
+          if [ "$check_status_code" != "200" ]; then
+            echo "❌ Failed to check allowance status (HTTP $check_status_code)"
+            cat /tmp/check_response.json
+            exit 1
+          fi
+
+          is_due=$(cat /tmp/check_response.json | grep -o '"isDue":[^,}]*' | cut -d':' -f2)
+          current_balance=$(cat /tmp/check_response.json | grep -o '"currentBalance":[^,}]*' | cut -d':' -f2)
+          weekly_allowance=$(cat /tmp/check_response.json | grep -o '"weeklyAllowance":[^,}]*' | cut -d':' -f2)
+
+          echo "📊 Current Status:"
+          echo "  - Is Due: $is_due"
+          echo "  - Current Balance: €$current_balance"
+          echo "  - Weekly Allowance: €$weekly_allowance"
+
+          if [ "$is_due" = "true" ]; then
+            echo "💰 Adding weekly allowance..."
+
+            # Add the weekly allowance
+            add_response=$(curl -s -w "%{http_code}" -o /tmp/add_response.json -X POST "$API_BASE_URL/api/weekly-allowance")
+            add_status_code="${add_response: -3}"
+
+            if [ "$add_status_code" != "200" ]; then
+              echo "❌ Failed to add weekly allowance (HTTP $add_status_code)"
+              cat /tmp/add_response.json
+              exit 1
+            fi
+
+            # Parse and display the result
+            success=$(cat /tmp/add_response.json | grep -o '"success":[^,}]*' | cut -d':' -f2)
+            new_balance=$(cat /tmp/add_response.json | grep -o '"newBalance":[^,}]*' | cut -d':' -f2)
+
+            if [ "$success" = "true" ]; then
+              echo "✅ Weekly allowance added successfully!"
+              echo "💰 New Balance: €$new_balance"
+            else
+              echo "❌ Failed to add weekly allowance"
+              cat /tmp/add_response.json
+              exit 1
+            fi
+          else
+            echo "⏳ Weekly allowance is not due yet. No action taken."
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "🚨 Weekly allowance automation failed!"
+          echo "Please check the logs and verify your API endpoint is working correctly."
+          echo "You may need to manually add the allowance or investigate the issue."
