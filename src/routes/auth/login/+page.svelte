@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { signIn } from '$lib/stores/auth.svelte';
 	import { page } from '$app/stores';
-	
+	import * as m from '$lib/paraglide/messages.js';
+
 	let email = '';
 	let password = '';
 	let error: string | null = null;
@@ -10,7 +11,7 @@
 
 	async function handleSubmit() {
 		if (!email || !password) {
-			error = 'Please fill in all fields';
+			error = m.error_validation();
 			return;
 		}
 
@@ -20,7 +21,7 @@
 		const { error: signInError } = await signIn(email, password);
 
 		if (signInError) {
-			error = (signInError as { message?: string }).message || 'An error occurred during sign in';
+			error = (signInError as { message?: string }).message || m.error_general();
 			isLoading = false;
 			return;
 		}
@@ -32,27 +33,27 @@
 </script>
 
 <svelte:head>
-	<title>Login - Taschengeld App</title>
+	<title>{m.login()} - {m.app_title()}</title>
 </svelte:head>
 
-<div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-	<div class="max-w-md w-full space-y-8">
+<div class="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+	<div class="w-full max-w-md space-y-8">
 		<div>
 			<h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
-				Sign in to your account
+				{m.sign_in()}
 			</h2>
 			<p class="mt-2 text-center text-sm text-gray-600">
-				Or
+				{m.dont_have_account()}
 				<a href="/auth/signup" class="font-medium text-indigo-600 hover:text-indigo-500">
-					create a new account
+					{m.sign_up()}
 				</a>
 			</p>
 		</div>
-		
+
 		<form class="mt-8 space-y-6" on:submit|preventDefault={handleSubmit}>
-			<div class="rounded-md shadow-sm -space-y-px">
+			<div class="-space-y-px rounded-md shadow-sm">
 				<div>
-					<label for="email" class="sr-only">Email address</label>
+					<label for="email" class="sr-only">{m.email()}</label>
 					<input
 						id="email"
 						name="email"
@@ -60,13 +61,13 @@
 						autocomplete="email"
 						required
 						bind:value={email}
-						class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-						placeholder="Email address"
+						class="relative block w-full appearance-none rounded-none rounded-t-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-indigo-500 focus:ring-indigo-500 focus:outline-none sm:text-sm"
+						placeholder={m.email()}
 						disabled={isLoading}
 					/>
 				</div>
 				<div>
-					<label for="password" class="sr-only">Password</label>
+					<label for="password" class="sr-only">{m.password()}</label>
 					<input
 						id="password"
 						name="password"
@@ -74,8 +75,8 @@
 						autocomplete="current-password"
 						required
 						bind:value={password}
-						class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-						placeholder="Password"
+						class="relative block w-full appearance-none rounded-none rounded-b-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-indigo-500 focus:ring-indigo-500 focus:outline-none sm:text-sm"
+						placeholder={m.password()}
 						disabled={isLoading}
 					/>
 				</div>
@@ -86,7 +87,11 @@
 					<div class="flex">
 						<div class="flex-shrink-0">
 							<svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-								<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+								<path
+									fill-rule="evenodd"
+									d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+									clip-rule="evenodd"
+								/>
 							</svg>
 						</div>
 						<div class="ml-3">
@@ -102,16 +107,32 @@
 				<button
 					type="submit"
 					disabled={isLoading}
-					class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					class="group relative flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{#if isLoading}
-						<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						<svg
+							class="mr-3 -ml-1 h-5 w-5 animate-spin text-white"
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+						>
+							<circle
+								class="opacity-25"
+								cx="12"
+								cy="12"
+								r="10"
+								stroke="currentColor"
+								stroke-width="4"
+							></circle>
+							<path
+								class="opacity-75"
+								fill="currentColor"
+								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+							></path>
 						</svg>
-						Signing in...
+						{m.loading()}
 					{:else}
-						Sign in
+						{m.sign_in()}
 					{/if}
 				</button>
 			</div>

@@ -3,7 +3,17 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { getProfile, getLoading, isAuthenticated, isParent, isKid, signOut, initializeAuth } from '$lib/stores/auth.svelte';
+	import {
+		getProfile,
+		getLoading,
+		isAuthenticated,
+		isParent,
+		isKid,
+		signOut,
+		initializeAuth
+	} from '$lib/stores/auth.svelte';
+	import * as m from '$lib/paraglide/messages.js';
+	import { getLocale, locales, localizeHref } from '$lib/paraglide/runtime.js';
 
 	let { children } = $props();
 
@@ -20,7 +30,7 @@
 
 	// Check if current route requires auth
 	let requiresAuth = $derived(!$page.route.id?.startsWith('/auth/'));
-	
+
 	// Redirect logic
 	$effect(() => {
 		if (!getLoading() && requiresAuth) {
@@ -49,48 +59,72 @@
 </script>
 
 {#if getLoading()}
-	<div class="min-h-screen flex items-center justify-center">
-		<div class="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+	<div class="flex min-h-screen items-center justify-center">
+		<div class="h-32 w-32 animate-spin rounded-full border-b-2 border-indigo-600"></div>
 	</div>
 {:else if !isAuthenticated() && requiresAuth}
 	<!-- This will be handled by the redirect logic above -->
-	<div class="min-h-screen flex items-center justify-center">
+	<div class="flex min-h-screen items-center justify-center">
 		<div class="text-center">
-			<p class="text-gray-600">Redirecting to login...</p>
+			<p class="text-gray-600">{m.redirecting()}</p>
 		</div>
 	</div>
 {:else if isAuthenticated() && getProfile()}
 	<!-- Authenticated layout with navigation -->
 	<div class="min-h-screen bg-gray-50">
 		<nav class="bg-white shadow">
-			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div class="flex justify-between h-16">
+			<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+				<div class="flex h-16 justify-between">
 					<div class="flex">
-						<div class="flex-shrink-0 flex items-center">
-							<h1 class="text-xl font-bold text-gray-900">Taschengeld App</h1>
+						<div class="flex flex-shrink-0 items-center">
+							<h1 class="text-xl font-bold text-gray-900">{m.app_title()}</h1>
 						</div>
 						<div class="hidden sm:ml-6 sm:flex sm:space-x-8">
 							{#if isKid()}
-								<a href="/kid" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-									My Account
+								<a
+									href="/kid"
+									class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700"
+								>
+									{m.kid_dashboard()}
 								</a>
 							{/if}
 							{#if isParent()}
-								<a href="/parent" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-									Parent Dashboard
+								<a
+									href="/parent"
+									class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700"
+								>
+									{m.parent_dashboard()}
 								</a>
 							{/if}
 						</div>
 					</div>
 					<div class="flex items-center space-x-4">
+						<!-- Language Switcher -->
+						<div class="relative">
+							<select
+								value={getLocale()}
+								onchange={(e) => {
+									const newLang = (e.target as HTMLSelectElement).value;
+									const newUrl = localizeHref($page.url.pathname, { locale: newLang });
+									goto(newUrl);
+								}}
+								class="rounded-md border border-gray-300 bg-white px-3 py-1 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+							>
+								{#each locales as locale}
+									<option value={locale}>
+										{locale === 'en' ? 'English' : 'Deutsch'}
+									</option>
+								{/each}
+							</select>
+						</div>
 						<span class="text-sm text-gray-700">
 							{getProfile()?.full_name} ({getProfile()?.role})
 						</span>
 						<button
 							onclick={handleLogout}
-							class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-md text-sm font-medium"
+							class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
 						>
-							Logout
+							{m.logout()}
 						</button>
 					</div>
 				</div>

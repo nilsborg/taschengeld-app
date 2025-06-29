@@ -4,6 +4,7 @@
 	import { supabase } from '$lib/supabase';
 	import { getUser } from '$lib/stores/auth.svelte';
 	import type { Kid, Transaction } from '$lib/supabase';
+	import * as m from '$lib/paraglide/messages.js';
 
 	let kidData = $state<Kid | null>(null);
 	let transactions = $state<Transaction[]>([]);
@@ -75,19 +76,19 @@
 		if (!kidData || !withdrawalAmount) return;
 
 		const amount = parseFloat(withdrawalAmount);
-		
+
 		if (isNaN(amount) || amount <= 0) {
-			withdrawalError = 'Please enter a valid amount';
+			withdrawalError = m.error_validation();
 			return;
 		}
 
 		if (!withdrawalDescription.trim()) {
-			withdrawalError = 'Please enter a description for this withdrawal';
+			withdrawalError = m.error_validation();
 			return;
 		}
 
 		if (amount > kidData.current_balance) {
-			withdrawalError = 'Insufficient balance';
+			withdrawalError = m.insufficient_funds();
 			return;
 		}
 
@@ -157,15 +158,15 @@
 	function getTransactionTypeLabel(type: string): string {
 		switch (type) {
 			case 'weekly_allowance':
-				return 'Weekly Allowance';
+				return m.transaction_allowance();
 			case 'interest':
-				return 'Interest';
+				return m.transaction_interest();
 			case 'withdrawal':
-				return 'Withdrawal';
+				return m.transaction_withdrawal();
 			case 'allowance_change':
-				return 'Allowance Change';
+				return m.transaction_allowance() + ' ' + m.type();
 			case 'interest_rate_change':
-				return 'Interest Rate Change';
+				return m.interest_rate() + ' ' + m.type();
 			default:
 				return type;
 		}
@@ -191,7 +192,7 @@
 	function formatTransactionAmount(transaction: Transaction): string {
 		const amount = transaction.amount;
 		const type = transaction.type;
-		
+
 		switch (type) {
 			case 'allowance_change': {
 				// Amount is stored as delta in euros
@@ -213,16 +214,20 @@
 </script>
 
 <svelte:head>
-	<title>My Account - Taschengeld App</title>
+	<title>{m.kid_dashboard()} - {m.app_title()}</title>
 </svelte:head>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 	{#if error}
-		<div class="rounded-md bg-red-50 p-4 mb-6">
+		<div class="mb-6 rounded-md bg-red-50 p-4">
 			<div class="flex">
 				<div class="flex-shrink-0">
 					<svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+						<path
+							fill-rule="evenodd"
+							d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+							clip-rule="evenodd"
+						/>
 					</svg>
 				</div>
 				<div class="ml-3">
@@ -233,54 +238,90 @@
 	{/if}
 
 	{#if isLoading}
-		<div class="flex justify-center items-center h-64">
-			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+		<div class="flex h-64 items-center justify-center">
+			<div class="h-12 w-12 animate-spin rounded-full border-b-2 border-indigo-600"></div>
 		</div>
 	{:else if kidData}
 		<!-- Account Overview -->
-		<div class="bg-white overflow-hidden shadow rounded-lg mb-8">
+		<div class="mb-8 overflow-hidden rounded-lg bg-white shadow">
 			<div class="px-4 py-5 sm:p-6">
-				<h1 class="text-2xl font-bold text-gray-900 mb-4">Welcome, {kidData.name}!</h1>
-				
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-					<div class="bg-green-50 rounded-lg p-4">
+				<h1 class="mb-4 text-2xl font-bold text-gray-900">Welcome, {kidData.name}!</h1>
+
+				<div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+					<div class="rounded-lg bg-green-50 p-4">
 						<div class="flex items-center">
 							<div class="flex-shrink-0">
-								<svg class="h-8 w-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+								<svg
+									class="h-8 w-8 text-green-400"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
+									/>
 								</svg>
 							</div>
 							<div class="ml-4">
-								<p class="text-sm font-medium text-green-800">Current Balance</p>
-								<p class="text-2xl font-bold text-green-900">{formatCurrency(kidData.current_balance)}</p>
+								<p class="text-sm font-medium text-green-800">{m.current_balance()}</p>
+								<p class="text-2xl font-bold text-green-900">
+									{formatCurrency(kidData.current_balance)}
+								</p>
 							</div>
 						</div>
 					</div>
 
-					<div class="bg-blue-50 rounded-lg p-4">
+					<div class="rounded-lg bg-blue-50 p-4">
 						<div class="flex items-center">
 							<div class="flex-shrink-0">
-								<svg class="h-8 w-8 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3a4 4 0 118 0v4m-4 8a4 4 0 01-4-4v-4h8v4a4 4 0 01-4 4z" />
+								<svg
+									class="h-8 w-8 text-blue-400"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M8 7V3a4 4 0 118 0v4m-4 8a4 4 0 01-4-4v-4h8v4a4 4 0 01-4 4z"
+									/>
 								</svg>
 							</div>
 							<div class="ml-4">
-								<p class="text-sm font-medium text-blue-800">Weekly Allowance</p>
-								<p class="text-2xl font-bold text-blue-900">{formatCurrency(kidData.weekly_allowance)}</p>
+								<p class="text-sm font-medium text-blue-800">{m.weekly_allowance()}</p>
+								<p class="text-2xl font-bold text-blue-900">
+									{formatCurrency(kidData.weekly_allowance)}
+								</p>
 							</div>
 						</div>
 					</div>
 
-					<div class="bg-purple-50 rounded-lg p-4">
+					<div class="rounded-lg bg-purple-50 p-4">
 						<div class="flex items-center">
 							<div class="flex-shrink-0">
-								<svg class="h-8 w-8 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+								<svg
+									class="h-8 w-8 text-purple-400"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+									/>
 								</svg>
 							</div>
 							<div class="ml-4">
-								<p class="text-sm font-medium text-purple-800">Interest Rate</p>
-								<p class="text-2xl font-bold text-purple-900">{(kidData.interest_rate * 100).toFixed(1)}%</p>
+								<p class="text-sm font-medium text-purple-800">{m.interest_rate()}</p>
+								<p class="text-2xl font-bold text-purple-900">
+									{(kidData.interest_rate * 100).toFixed(1)}%
+								</p>
 							</div>
 						</div>
 					</div>
@@ -289,16 +330,24 @@
 		</div>
 
 		<!-- Withdrawal Form -->
-		<div class="bg-white overflow-hidden shadow rounded-lg mb-8">
+		<div class="mb-8 overflow-hidden rounded-lg bg-white shadow">
 			<div class="px-4 py-5 sm:p-6">
-				<h2 class="text-lg font-semibold text-gray-900 mb-4">Make a Withdrawal</h2>
-				
-				<form onsubmit={(e) => { e.preventDefault(); handleWithdrawal(); }} class="space-y-4">
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<h2 class="mb-4 text-lg font-semibold text-gray-900">{m.make_withdrawal()}</h2>
+
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						handleWithdrawal();
+					}}
+					class="space-y-4"
+				>
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 						<div>
-							<label for="amount" class="block text-sm font-medium text-gray-700">Amount</label>
-							<div class="mt-1 relative rounded-md shadow-sm">
-								<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+							<label for="amount" class="block text-sm font-medium text-gray-700"
+								>{m.amount()}</label
+							>
+							<div class="relative mt-1 rounded-md shadow-sm">
+								<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 									<span class="text-gray-500 sm:text-sm">€</span>
 								</div>
 								<input
@@ -308,7 +357,7 @@
 									max={kidData.current_balance}
 									id="amount"
 									bind:value={withdrawalAmount}
-									class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
+									class="block w-full rounded-md border-gray-300 pr-12 pl-7 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
 									placeholder="0.00"
 									disabled={isWithdrawing}
 									required
@@ -317,12 +366,14 @@
 						</div>
 
 						<div>
-							<label for="description" class="block text-sm font-medium text-gray-700">Description</label>
+							<label for="description" class="block text-sm font-medium text-gray-700"
+								>{m.description()}</label
+							>
 							<input
 								type="text"
 								id="description"
 								bind:value={withdrawalDescription}
-								class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+								class="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
 								placeholder="What is this for?"
 								disabled={isWithdrawing}
 								required
@@ -331,22 +382,38 @@
 					</div>
 
 					{#if withdrawalError}
-						<div class="text-red-600 text-sm">{withdrawalError}</div>
+						<div class="text-sm text-red-600">{withdrawalError}</div>
 					{/if}
 
 					<button
 						type="submit"
 						disabled={isWithdrawing}
-						class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+						class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{#if isWithdrawing}
-							<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							<svg
+								class="mr-2 -ml-1 h-4 w-4 animate-spin text-white"
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+							>
+								<circle
+									class="opacity-25"
+									cx="12"
+									cy="12"
+									r="10"
+									stroke="currentColor"
+									stroke-width="4"
+								></circle>
+								<path
+									class="opacity-75"
+									fill="currentColor"
+									d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+								></path>
 							</svg>
-							Processing...
+							{m.loading()}
 						{:else}
-							Withdraw Money
+							{m.withdrawal_submit()}
 						{/if}
 					</button>
 				</form>
@@ -354,38 +421,56 @@
 		</div>
 
 		<!-- Transaction History -->
-		<div class="bg-white overflow-hidden shadow rounded-lg">
+		<div class="overflow-hidden rounded-lg bg-white shadow">
 			<div class="px-4 py-5 sm:p-6">
-				<h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Transactions</h2>
-				
+				<h2 class="mb-4 text-lg font-semibold text-gray-900">{m.recent_transactions()}</h2>
+
 				{#if transactions.length === 0}
-					<p class="text-gray-500 text-center py-8">No transactions yet.</p>
+					<p class="py-8 text-center text-gray-500">{m.no_transactions_message()}</p>
 				{:else}
 					<div class="overflow-x-auto">
 						<table class="min-w-full divide-y divide-gray-200">
 							<thead class="bg-gray-50">
 								<tr>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-									<th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+									<th
+										class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+										>{m.date()}</th
+									>
+									<th
+										class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+										>{m.type()}</th
+									>
+									<th
+										class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+										>{m.description()}</th
+									>
+									<th
+										class="px-6 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase"
+										>{m.amount()}</th
+									>
 								</tr>
 							</thead>
-							<tbody class="bg-white divide-y divide-gray-200">
+							<tbody class="divide-y divide-gray-200 bg-white">
 								{#each transactions as transaction (transaction.id)}
 									<tr>
-										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+										<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
 											{formatDate(transaction.created_at)}
 										</td>
 										<td class="px-6 py-4 whitespace-nowrap">
-											<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+											<span
+												class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800"
+											>
 												{getTransactionTypeLabel(transaction.type)}
 											</span>
 										</td>
-										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+										<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
 											{transaction.description || '-'}
 										</td>
-										<td class="px-6 py-4 whitespace-nowrap text-sm text-right {getTransactionColor(transaction.type)} font-medium">
+										<td
+											class="px-6 py-4 text-right text-sm whitespace-nowrap {getTransactionColor(
+												transaction.type
+											)} font-medium"
+										>
 											{formatTransactionAmount(transaction)}
 										</td>
 									</tr>
