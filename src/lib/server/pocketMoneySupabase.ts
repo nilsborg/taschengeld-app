@@ -3,7 +3,7 @@ import { supabase, supabaseService, type Kid, type Transaction } from './supabas
 export class PocketMoneyService {
 	// Initialize Louis if he doesn't exist
 	static async initializeLouis(weeklyAllowance: number = 10, interestRate: number = 0.01) {
-		const { data: existingLouis, error } = await supabase
+		const { data: existingLouis, error } = await supabaseService
 			.from('kids')
 			.select('*')
 			.eq('name', 'Louis')
@@ -15,7 +15,7 @@ export class PocketMoneyService {
 		}
 
 		if (!existingLouis) {
-			const { data: newLouis, error: insertError } = await supabase
+			const { data: newLouis, error: insertError } = await supabaseService
 				.from('kids')
 				.insert({
 					name: 'Louis',
@@ -60,7 +60,7 @@ export class PocketMoneyService {
 		if (weeklyAllowance !== undefined) updateData.weekly_allowance = weeklyAllowance;
 		if (interestRate !== undefined) updateData.interest_rate = interestRate;
 
-		const { error } = await supabase.from('kids').update(updateData).eq('id', louis.id);
+		const { error } = await supabaseService.from('kids').update(updateData).eq('id', louis.id);
 
 		if (error) {
 			throw new Error(`Failed to update Louis settings: ${error.message}`);
@@ -110,7 +110,7 @@ export class PocketMoneyService {
 		const newBalance = louis.current_balance + louis.weekly_allowance;
 
 		// Update balance
-		const { error: updateError } = await supabase
+		const { error: updateError } = await supabaseService
 			.from('kids')
 			.update({
 				current_balance: newBalance,
@@ -123,7 +123,7 @@ export class PocketMoneyService {
 		}
 
 		// Record transaction
-		const { error: transactionError } = await supabase.from('transactions').insert({
+		const { error: transactionError } = await supabaseService.from('transactions').insert({
 			kid_id: louis.id,
 			type: 'weekly_allowance',
 			amount: louis.weekly_allowance,
@@ -150,7 +150,7 @@ export class PocketMoneyService {
 		const newBalance = louis.current_balance + interestAmount;
 
 		// Update balance
-		const { error: updateError } = await supabase
+		const { error: updateError } = await supabaseService
 			.from('kids')
 			.update({
 				current_balance: newBalance,
@@ -163,7 +163,7 @@ export class PocketMoneyService {
 		}
 
 		// Record transaction
-		const { error: transactionError } = await supabase.from('transactions').insert({
+		const { error: transactionError } = await supabaseService.from('transactions').insert({
 			kid_id: louis.id,
 			type: 'interest',
 			amount: interestAmount,
@@ -189,7 +189,7 @@ export class PocketMoneyService {
 		const newBalance = louis.current_balance - amount;
 
 		// Update balance
-		const { error: updateError } = await supabase
+		const { error: updateError } = await supabaseService
 			.from('kids')
 			.update({
 				current_balance: newBalance,
@@ -202,7 +202,7 @@ export class PocketMoneyService {
 		}
 
 		// Record transaction (negative amount for withdrawal)
-		const { error: transactionError } = await supabase.from('transactions').insert({
+		const { error: transactionError } = await supabaseService.from('transactions').insert({
 			kid_id: louis.id,
 			type: 'withdrawal',
 			amount: -amount, // Negative for withdrawal
@@ -218,7 +218,7 @@ export class PocketMoneyService {
 
 	// Get transaction history
 	static async getTransactionHistory(limit: number = 20): Promise<Transaction[]> {
-		const { data, error } = await supabase
+		const { data, error } = await supabaseService
 			.from('transactions')
 			.select('*')
 			.order('created_at', { ascending: false })
@@ -233,7 +233,7 @@ export class PocketMoneyService {
 
 	// Get transactions for a specific kid
 	static async getKidTransactions(kidId: number, limit: number = 20): Promise<Transaction[]> {
-		const { data, error } = await supabase
+		const { data, error } = await supabaseService
 			.from('transactions')
 			.select('*')
 			.eq('kid_id', kidId)
@@ -286,7 +286,7 @@ export class PocketMoneyService {
 		const louis = await this.getLouis();
 		if (!louis) return false;
 
-		const { data: lastInterestPayment, error } = await supabase
+		const { data: lastInterestPayment, error } = await supabaseService
 			.from('transactions')
 			.select('*')
 			.eq('kid_id', louis.id)
