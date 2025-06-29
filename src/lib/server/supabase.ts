@@ -3,8 +3,18 @@ import { env } from '$env/dynamic/private';
 
 if (!env.SUPABASE_URL) throw new Error('SUPABASE_URL is not set');
 if (!env.SUPABASE_ANON_KEY) throw new Error('SUPABASE_ANON_KEY is not set');
+if (!env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
 
 export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+	auth: {
+		autoRefreshToken: false,
+		persistSession: false,
+		detectSessionInUrl: false
+	}
+});
+
+// Service role client for server-side operations that bypass RLS
+export const supabaseService = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
 	auth: {
 		autoRefreshToken: false,
 		persistSession: false,
@@ -82,8 +92,11 @@ export async function getServerSession(request: Request) {
 
 	const token = authHeader.replace('Bearer ', '');
 	const client = createServerClient(token);
-	
-	const { data: { user }, error } = await client.auth.getUser(token);
+
+	const {
+		data: { user },
+		error
+	} = await client.auth.getUser(token);
 	if (error || !user) return null;
 
 	return user;
@@ -91,7 +104,7 @@ export async function getServerSession(request: Request) {
 
 export async function getUserProfile(userId: string, accessToken?: string) {
 	const client = accessToken ? createServerClient(accessToken) : supabase;
-	
+
 	const { data: profile, error } = await client
 		.from('profiles')
 		.select('*')

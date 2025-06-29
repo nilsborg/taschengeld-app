@@ -1,4 +1,4 @@
-import { supabase, type Kid, type Transaction } from './supabase';
+import { supabase, supabaseService, type Kid, type Transaction } from './supabase';
 
 export class PocketMoneyService {
 	// Initialize Louis if he doesn't exist
@@ -38,7 +38,7 @@ export class PocketMoneyService {
 
 	// Get Louis's current data
 	static async getLouis(): Promise<Kid | undefined> {
-		const { data, error } = await supabase
+		const { data, error } = await supabaseService
 			.from('kids')
 			.select('*')
 			.eq('name', 'Louis')
@@ -60,10 +60,7 @@ export class PocketMoneyService {
 		if (weeklyAllowance !== undefined) updateData.weekly_allowance = weeklyAllowance;
 		if (interestRate !== undefined) updateData.interest_rate = interestRate;
 
-		const { error } = await supabase
-			.from('kids')
-			.update(updateData)
-			.eq('id', louis.id);
+		const { error } = await supabase.from('kids').update(updateData).eq('id', louis.id);
 
 		if (error) {
 			throw new Error(`Failed to update Louis settings: ${error.message}`);
@@ -78,9 +75,9 @@ export class PocketMoneyService {
 		const newBalance = louis.current_balance + louis.weekly_allowance;
 
 		// Update balance
-		const { error: updateError } = await supabase
+		const { error: updateError } = await supabaseService
 			.from('kids')
-			.update({ 
+			.update({
 				current_balance: newBalance,
 				updated_at: new Date().toISOString()
 			})
@@ -91,14 +88,12 @@ export class PocketMoneyService {
 		}
 
 		// Record transaction
-		const { error: transactionError } = await supabase
-			.from('transactions')
-			.insert({
-				kid_id: louis.id,
-				type: 'weekly_allowance',
-				amount: louis.weekly_allowance,
-				description: null
-			});
+		const { error: transactionError } = await supabaseService.from('transactions').insert({
+			kid_id: louis.id,
+			type: 'weekly_allowance',
+			amount: louis.weekly_allowance,
+			description: null
+		});
 
 		if (transactionError) {
 			throw new Error(`Failed to record transaction: ${transactionError.message}`);
@@ -117,7 +112,7 @@ export class PocketMoneyService {
 		// Update balance
 		const { error: updateError } = await supabase
 			.from('kids')
-			.update({ 
+			.update({
 				current_balance: newBalance,
 				updated_at: new Date().toISOString()
 			})
@@ -128,14 +123,12 @@ export class PocketMoneyService {
 		}
 
 		// Record transaction
-		const { error: transactionError } = await supabase
-			.from('transactions')
-			.insert({
-				kid_id: louis.id,
-				type: 'weekly_allowance',
-				amount: louis.weekly_allowance,
-				description: null
-			});
+		const { error: transactionError } = await supabase.from('transactions').insert({
+			kid_id: louis.id,
+			type: 'weekly_allowance',
+			amount: louis.weekly_allowance,
+			description: null
+		});
 
 		if (transactionError) {
 			throw new Error(`Failed to record transaction: ${transactionError.message}`);
@@ -159,7 +152,7 @@ export class PocketMoneyService {
 		// Update balance
 		const { error: updateError } = await supabase
 			.from('kids')
-			.update({ 
+			.update({
 				current_balance: newBalance,
 				updated_at: new Date().toISOString()
 			})
@@ -170,14 +163,12 @@ export class PocketMoneyService {
 		}
 
 		// Record transaction
-		const { error: transactionError } = await supabase
-			.from('transactions')
-			.insert({
-				kid_id: louis.id,
-				type: 'interest',
-				amount: interestAmount,
-				description: null
-			});
+		const { error: transactionError } = await supabase.from('transactions').insert({
+			kid_id: louis.id,
+			type: 'interest',
+			amount: interestAmount,
+			description: null
+		});
 
 		if (transactionError) {
 			throw new Error(`Failed to record transaction: ${transactionError.message}`);
@@ -200,7 +191,7 @@ export class PocketMoneyService {
 		// Update balance
 		const { error: updateError } = await supabase
 			.from('kids')
-			.update({ 
+			.update({
 				current_balance: newBalance,
 				updated_at: new Date().toISOString()
 			})
@@ -211,14 +202,12 @@ export class PocketMoneyService {
 		}
 
 		// Record transaction (negative amount for withdrawal)
-		const { error: transactionError } = await supabase
-			.from('transactions')
-			.insert({
-				kid_id: louis.id,
-				type: 'withdrawal',
-				amount: -amount, // Negative for withdrawal
-				description
-			});
+		const { error: transactionError } = await supabase.from('transactions').insert({
+			kid_id: louis.id,
+			type: 'withdrawal',
+			amount: -amount, // Negative for withdrawal
+			description
+		});
 
 		if (transactionError) {
 			throw new Error(`Failed to record transaction: ${transactionError.message}`);
@@ -269,7 +258,7 @@ export class PocketMoneyService {
 		const louis = await this.getLouis();
 		if (!louis) return false;
 
-		const { data: lastWeeklyPayment, error } = await supabase
+		const { data: lastWeeklyPayment, error } = await supabaseService
 			.from('transactions')
 			.select('*')
 			.eq('kid_id', louis.id)
@@ -326,6 +315,4 @@ export class PocketMoneyService {
 			lastPaymentDate.getFullYear() !== now.getFullYear()
 		);
 	}
-
-
 }
