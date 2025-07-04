@@ -299,11 +299,7 @@ export class PocketMoneyService {
 		}
 
 		if (!lastInterestPayment || lastInterestPayment.length === 0) {
-			// Check if account is at least a month old
-			const accountAge = Math.floor(
-				(new Date().getTime() - new Date(louis.created_at).getTime()) / (1000 * 60 * 60 * 24)
-			);
-			return accountAge >= 30;
+			return true; // First interest payment is always due
 		}
 
 		const lastPaymentDate = new Date(lastInterestPayment[0].created_at);
